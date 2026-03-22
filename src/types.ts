@@ -39,7 +39,7 @@ export interface ChannelDef {
 export interface AuditEntry {
   id: string;
   agentId: string;
-  invocationType: 'triage' | 'main' | 'memory' | 'proposal';
+  invocationType: 'triage' | 'main' | 'memory' | 'proposal' | 'comms';
   model: string;
   tokensIn?: number;
   tokensOut?: number;
@@ -67,3 +67,6 @@ export interface SpawnResult {
   tokensIn?: number;
   tokensOut?: number;
 }
+
+// Re-export comms types for convenience
+export type { Message, Channel, ICommsProvider } from './comms/types.js';
