@@ -2,16 +2,18 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const FIXTURE_ORG = path.resolve(__dirname, '../fixtures/sample-org');
-const TEMP_ORG = path.join(PROJECT_ROOT, 'org');
+
+let tempDir: string;
 
 function runCli(args: string[]): string {
-  return execFileSync('npx', ['tsx', 'src/cli.ts', ...args], {
-    cwd: PROJECT_ROOT,
+  return execFileSync('npx', ['tsx', path.join(PROJECT_ROOT, 'src/cli.ts'), ...args], {
+    cwd: tempDir,
     encoding: 'utf-8',
     timeout: 10_000,
   });
@@ -19,16 +21,12 @@ function runCli(args: string[]): string {
 
 describe('CLI commands', () => {
   beforeEach(() => {
-    fs.cpSync(FIXTURE_ORG, TEMP_ORG, { recursive: true });
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-test-'));
+    fs.cpSync(FIXTURE_ORG, path.join(tempDir, 'org'), { recursive: true });
   });
 
   afterEach(() => {
-    fs.rmSync(TEMP_ORG, { recursive: true, force: true });
-    // Clean up any test DBs
-    const dataDir = path.join(PROJECT_ROOT, 'data');
-    if (fs.existsSync(dataDir)) {
-      fs.rmSync(dataDir, { recursive: true, force: true });
-    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('hive org prints the org chart', () => {
