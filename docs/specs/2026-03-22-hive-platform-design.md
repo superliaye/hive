@@ -16,7 +16,7 @@ The goal is not task distribution (which simple sub-agent spawning already solve
 2. **Agents are disposable** — identity, memories, and skills are all serialized in files. Spawn a new agent, archive the old one. No "promotion" or "transfer."
 3. **Self-modifying configuration** — agents edit their own md files to adapt. Memories accumulate. Priorities shift. Working relationships evolve.
 4. **Hierarchical delegation** — CEO doesn't know how many engineers exist. Each level manages one level down. Decisions cascade.
-5. **Channel-based communication** — agents don't send messages to each other; they post in shared channels. Discovery is organic (channels) + intentional (org directory).
+5. **Channel-based communication** — agents primarily communicate via shared channels. Private channels (two-person) exist for DM-like conversations but are still channels, not point-to-point pipes. Discovery is organic (channels) + intentional (org directory).
 6. **Everything via Claude CLI** — no direct API calls. Every LLM invocation (triage, main work, memory indexing) goes through `claude` CLI.
 7. **Auditable execution** — every invocation is logged. Token usage, duration, input/output summaries. Data for optimization.
 
@@ -139,7 +139,7 @@ org/ceo/engineering/vp-eng/backend/engineer-1/
 │   └── 2026-03-21.md
 ├── .claude/
 │   ├── settings.json    # Claude CLI config (model, thinking level)
-│   └── skills/          # Role-specific skills symlinked from skills/
+│   └── skills/          # Role-specific skills (copied or symlinked from skills/)
 └── .workspace/          # gitignored — runtime only
     ├── scratch/         # Temp files, drafts
     ├── embeddings/      # Local vector index for memory search
@@ -155,9 +155,11 @@ role: Backend Software Engineer
 model: sonnet
 emoji: ⚙️
 vibe: "Ships clean APIs, hates flaky tests, quietly fixes things before anyone notices."
-tools: [Read, Write, Edit, Bash, Grep, Glob]
+tools: [Read, Write, Edit, Bash, Grep, Glob]  # Orchestrator passes as --allowedTools
 ---
 ```
+
+The `tools` field in frontmatter maps directly to Claude CLI's `--allowedTools` flag. The orchestrator reads this field and restricts agent capabilities accordingly. A QA agent might only get `[Read, Bash, Grep]` — no Write or Edit on production repos.
 
 ```markdown
 # Identity
@@ -210,7 +212,7 @@ The novel file — captures organizational context, authority, and evolving work
 
 ## Communication Norms
 - Standup updates: daily in #eng-backend
-- Blockers: DM @vp-eng immediately
+- Blockers: message @vp-eng in private channel immediately
 - Cross-team requests: post in #cross-eng, cc relevant lead
 
 ## Standing Orders
@@ -277,7 +279,7 @@ Defines heartbeat behaviors and proactive work.
 - Explore code quality improvements in owned areas
 
 ## Schedule
-- Active: follows org working hours
+- Active hours: 09:00-18:00 org timezone (configurable in org/ORG.md)
 - Deep work: 2hr blocks, mute non-urgent channels
 ```
 
@@ -296,7 +298,27 @@ Defines heartbeat behaviors and proactive work.
 
 ## Communication Layer — Canopy Integration
 
-### Why Canopy
+### Communication Interface Abstraction
+
+The orchestrator talks to Canopy through an interface (`ICommsProvider`), not directly. This allows swapping Canopy for a fallback (SQLite + REST) if Canopy proves unreliable:
+
+```typescript
+interface ICommsProvider {
+  postMessage(channel: string, sender: string, content: string, opts?: { thread?: string }): Promise<Message>;
+  readChannel(channel: string, opts?: { limit?: number; since?: Date }): Promise<Message[]>;
+  searchHistory(query: string, opts?: { channel?: string; sender?: string }): Promise<Message[]>;
+  listChannels(): Promise<Channel[]>;
+  createChannel(name: string, members?: string[]): Promise<Channel>;
+  getUnread(agentId: string): Promise<Message[]>;
+  markRead(agentId: string, messageIds: string[]): Promise<void>;
+}
+```
+
+Two implementations planned:
+1. **CanopyProvider** — wraps Canopy's REST API (primary)
+2. **SqliteProvider** — fallback using `better-sqlite3` with FTS5 search
+
+### Why Canopy (Primary)
 
 [Canopy](https://github.com/kwalus/Canopy) is a local-first, P2P, Slack-like communication platform with agent-first features:
 
@@ -373,17 +395,30 @@ Agent tools available via Canopy MCP:
 
 Fast, no LLM call. Produces a ranked list of unread messages.
 
+All components are normalized to 0-10 range before weighting:
+
 ```typescript
 function scoreMessage(msg: Message, agent: AgentConfig): number {
-  const senderRank = getHierarchyScore(msg.sender, agent); // manager=10, peer=5, report=3, unknown=1
-  const urgency = msg.metadata?.urgent ? 5 : 0;
-  const channelWeight = getChannelWeight(msg.channel, agent); // #board=10, #incidents=8, team=5, general=2
+  // All components normalized to 0-10
+  const senderRank = getHierarchyScore(msg.sender, agent);
+    // manager=10, peer=5, report=3, unknown=1
+  const urgency = msg.metadata?.urgent ? 10 : 0;
+  const channelWeight = getChannelWeight(msg.channel, agent);
+    // #board=10, #incidents=8, team=5, general=2
   const recency = computeRecencyDecay(msg.timestamp);
-  const mention = msg.mentions?.includes(agent.id) ? 4 : 0;
+    // 10 = just now, decays linearly to 0 over 24 hours
+  const mention = msg.mentions?.includes(agent.id) ? 10 : 0;
 
-  return (senderRank * 3) + (urgency * 5) + (channelWeight * 2) + recency + (mention * 4);
+  // Weights sum to 1.0 for a final score of 0-10
+  return (senderRank * 0.25)
+       + (urgency * 0.25)
+       + (channelWeight * 0.20)
+       + (recency * 0.15)
+       + (mention * 0.15);
 }
 ```
+
+The weights are configurable per agent via ROUTINE.md — a CEO might weight urgency higher; an engineer might weight mentions higher.
 
 ### Stage 2: LLM Triage (Claude CLI, haiku)
 
@@ -396,14 +431,24 @@ Reads ranked messages against agent's PRIORITIES.md + BUREAU.md. Classifies each
 | **NOTE** | Extract key info, append to MEMORY.md or memory/today.md. No action. |
 | **IGNORE** | Mark as read. Drop silently. Trivial or irrelevant. |
 
-Triage invocation:
+Triage invocation (orchestrator `cd`s into agent directory first):
 ```bash
-claude --model haiku \
-  --system-prompt "$(cat skills/shared/gateway-triage/SKILL.md)" \
-  --append-system-prompt "$(cat agent/PRIORITIES.md)" \
-  --append-system-prompt "$(cat agent/BUREAU.md)" \
-  --input "$(cat ranked-messages.json)" \
+cd /path/to/org/ceo/engineering/vp-eng/backend/engineer-1 && \
+cat ranked-messages.json | claude -p \
+  --model haiku \
+  --system-prompt "$(cat ../../../../../../skills/shared/gateway-triage/SKILL.md)" \
+  --append-system-prompt "$(cat PRIORITIES.md)" \
+  --append-system-prompt "$(cat BUREAU.md)" \
   --output-format json
+```
+
+In practice, the orchestrator assembles the system prompt and input as strings in TypeScript, then spawns:
+```typescript
+const result = await spawn('claude', [
+  '-p', '--model', 'haiku',
+  '--system-prompt', assembledTriagePrompt,
+  '--output-format', 'json',
+], { cwd: agentDir, input: rankedMessagesJson });
 ```
 
 The triage skill itself is customizable per role — a CEO's triage philosophy differs from a junior engineer's.
@@ -439,26 +484,80 @@ hive start
 
 ### Agent Invocation — What Gets Fed to Claude CLI
 
-```bash
-claude \
-  --system-prompt "$(assemble_prompt agent/)" \    # IDENTITY + SOUL + BUREAU + PRIORITIES + ROUTINE + MEMORY
-  --profile "agent-engineer-1" \
-  --project-dir "agent/.claude/" \                  # picks up skills/ and settings.json
-  --mcp-server canopy \                             # communication
-  --mcp-server org-directory \                      # org chart queries
-  --input "$TASK_OR_MESSAGES"
+The orchestrator `cd`s into the agent's directory before invocation. Claude CLI automatically discovers `.claude/settings.json` (which configures MCP servers) and `.claude/skills/` from the working directory.
+
+```typescript
+// Orchestrator assembles the system prompt from agent's md files
+const systemPrompt = assemblePrompt(agentDir); // IDENTITY + SOUL + BUREAU + PRIORITIES + ROUTINE + MEMORY
+
+// For non-interactive (one-shot) work:
+const result = await spawn('claude', [
+  '-p',                              // print mode (non-interactive, required for scripted use)
+  '--model', agent.model,            // from IDENTITY.md frontmatter
+  '--system-prompt', systemPrompt,
+  '--allowedTools', agent.tools.join(','),  // from IDENTITY.md frontmatter
+], { cwd: agentDir, input: taskOrMessages });
+
+// For interactive (persistent) agents:
+// The orchestrator spawns claude without -p, manages stdin/stdout
+const proc = spawn('claude', [
+  '--system-prompt', systemPrompt,
+  '--allowedTools', agent.tools.join(','),
+], { cwd: agentDir, stdio: 'pipe' });
 ```
 
-The `assemble_prompt` function concatenates md files in a specific order, with clear section markers.
+MCP servers (Canopy, org-directory) are configured in the agent's `.claude/settings.json`, not via CLI flags. Claude CLI discovers them automatically from the working directory.
 
 ### Persistent vs On-Demand
 
+**Important:** "persistent" does NOT mean a long-running Claude CLI daemon. Claude CLI is request-response — there is no persistent process. "Persistent" means the orchestrator invokes the agent on a tight heartbeat schedule (e.g., every 5-10 minutes), maintaining continuity via the agent's md files and memory.
+
 | Type | Who | Behavior |
 |------|-----|----------|
-| **Persistent** | CEO, VPs, team leads | Always running. Heartbeat triage every N minutes. Proactive routines. |
+| **Persistent** | CEO, VPs, team leads | Invoked on tight heartbeat (every 5-10 min). Triage + proactive routines each cycle. |
 | **On-demand** | Engineers, designers, testers | Dormant until triggered. Wake on: @mention, task assignment, scheduled routine. Do work. Exit. |
 
 On-demand agents still have proactive routines defined in ROUTINE.md — the orchestrator fires these on schedule (e.g., "every 2 hours, check for open PRs").
+
+### Crash Recovery & Resilience
+
+The orchestrator tracks agent state in `data/orchestrator.db` (SQLite):
+
+```sql
+CREATE TABLE agent_state (
+  agent_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,            -- 'active' | 'idle' | 'working' | 'disposed'
+  last_invocation DATETIME,
+  last_heartbeat DATETIME,
+  current_task TEXT,               -- summary of what agent was doing
+  pid INTEGER                      -- process ID of current claude invocation
+);
+```
+
+**On `hive start`:**
+1. Check for previous dirty shutdown (stale PIDs in agent_state)
+2. For each stale agent: mark as idle, let next heartbeat cycle resume naturally
+3. Agent's PRIORITIES.md and memory/ files preserve context — no work is lost
+
+**On agent crash (Claude CLI exits non-zero):**
+1. Log error to audit.db
+2. Mark agent as idle in agent_state
+3. Next heartbeat cycle re-invokes the agent normally
+4. If an agent crashes 3+ times in 10 minutes → mark as errored, alert CEO via #incidents
+
+**On orchestrator crash:**
+1. On restart, `hive start` reads org/ tree and agent_state.db
+2. All agents resume their heartbeat schedules
+3. Unprocessed messages remain in Canopy — agents catch up via triage
+
+### Concurrency Control
+
+File writes are serialized per agent by the orchestrator:
+
+1. **One invocation per agent at a time.** The orchestrator never spawns two Claude CLI processes for the same agent simultaneously. Triage must complete before main work begins.
+2. **Manager writes to reports' files** go through the orchestrator, which queues them and applies when the target agent is idle.
+3. **Memory writes** use append-only daily log files. The orchestrator appends triage NOTE extracts; the agent appends during its own session. Since these never run simultaneously (rule 1), no race condition.
+4. **Git commits** are batched by the orchestrator (see Git Strategy below).
 
 ## Org Evolution — Proposals
 
@@ -487,7 +586,12 @@ HEAVYWEIGHT (super user must approve):
 1. Agent posts proposal in relevant channel
    e.g., VP-Eng in #leadership: "Need to spawn engineer-4 for infra work"
 
-2. Orchestrator detects structural proposal (via triage classification)
+2. Orchestrator detects structural proposal via two mechanisms:
+   a. The triage LLM classifies it as ACT_NOW with a `proposal` tag
+      (the triage skill explicitly looks for structural intent:
+       hiring, firing, restructuring, new teams, role changes)
+   b. Agents can also explicitly invoke a `/propose` skill that
+      outputs a structured proposal document
    → Creates: org/.proposals/2026-03-22-spawn-eng-4.md
    → Contains: rationale, proposed md files, cost estimate
 
@@ -553,7 +657,11 @@ Each agent has its own memory system, mirroring OpenClaw's architecture:
 
 ### .workspace/embeddings/ (Gitignored)
 
-Local vector index for each agent. Rebuilt on demand from memory/ files. Uses lightweight embedding model (e.g., nomic-embed-text). Gitignored because it's derived data.
+Local vector index for each agent. Rebuilt on demand from memory/ files. Gitignored because it's derived data.
+
+**Embedding model:** A single shared instance of a lightweight local model (e.g., nomic-embed-text via Ollama) serves all agents. The orchestrator manages one embedding service; agents' memory-index skills call it via a local HTTP endpoint. This avoids loading N copies of the model for N agents. Estimated overhead: ~500MB RAM for the model, shared across all agents.
+
+If no local model is available, the system falls back to BM25-only search (keyword matching over memory files), which requires zero additional resources.
 
 ## Audit System
 
@@ -661,6 +769,74 @@ Inspired by [agency-agents](https://github.com/msitarzewski/agency-agents) patte
 - Evidence-based quality loops (dev → QA with max retries + escalation)
 - "Default to skepticism" pattern for review/QA agents
 
+## Git Strategy
+
+Agent file changes (PRIORITIES.md, MEMORY.md, memory/*.md) happen frequently. Unmanaged, this creates extreme commit noise.
+
+**Approach: Orchestrator-managed batched commits.**
+
+1. Agents do NOT run `git commit` themselves. They write files; the orchestrator commits.
+2. The orchestrator batches commits on a schedule (e.g., every 15 minutes) or on significant events (proposal approved, agent spawned/disposed).
+3. Commit messages are structured: `[agent-id] description` for per-agent changes, `[orchestrator] description` for structural changes.
+4. Memory file changes are squashed into daily commits: `[engineer-1] daily memory update 2026-03-22`
+5. Structural changes (new agent folders, proposals) get individual commits for clear audit trail.
+
+**What gets committed:**
+- PRIORITIES.md, MEMORY.md, memory/*.md changes → batched
+- BUREAU.md working relationship updates → batched
+- New agent folders, proposal files → individual commits
+- IDENTITY.md, SOUL.md changes → individual commits (rare, significant)
+
+**What does NOT get committed:**
+- `.workspace/` (gitignored) — scratch, embeddings, runtime state
+- `data/` (audit.db, orchestrator.db) — operational data, not versioned
+
+## Org Configuration — ORG.md
+
+Top-level org config lives at `org/ORG.md`:
+
+```markdown
+# Organization
+
+## Mission
+Build a SaaS analytics platform that helps small businesses understand their data.
+
+## Working Hours
+- Timezone: America/Los_Angeles
+- Active: 09:00 - 18:00
+- Orchestrator respects these for heartbeat scheduling
+
+## Defaults
+- Default model: sonnet
+- Triage model: haiku
+- Heartbeat interval (persistent): 10 min
+- Heartbeat interval (on-demand proactive): 2 hr
+
+## Cost Guardrails
+- Max daily token budget: configurable
+- Alert threshold: 80% of daily budget
+- Hard stop: 100% of daily budget (only #board channel remains active)
+```
+
+## Cost Estimation
+
+Back-of-envelope for a 10-agent org running 8 hours:
+
+| Activity | Agents | Frequency | Tokens/call | Calls/day | Daily tokens |
+|----------|--------|-----------|-------------|-----------|-------------|
+| Triage (haiku) | 3 persistent | Every 10 min | ~1,000 | 144 | 144,000 |
+| Triage (haiku) | 7 on-demand | Every 2 hr | ~1,000 | 28 | 28,000 |
+| Main work (sonnet) | 10 | ~5 tasks/day each | ~5,000 | 50 | 250,000 |
+| Memory index (haiku) | 10 | 2x/day | ~500 | 20 | 10,000 |
+| **Total** | | | | **242** | **~432,000** |
+
+At current pricing (~$3/M input, ~$15/M output for sonnet; ~$0.25/$1.25 for haiku):
+- Haiku triage + memory: ~182K tokens → ~$0.05-0.25/day
+- Sonnet main work: ~250K tokens → ~$0.75-3.75/day
+- **Estimated daily cost: $1-4 for a 10-agent org**
+
+This scales roughly linearly with agent count and work intensity. Heavy coding tasks with large context windows will push costs higher.
+
 ## External Dependencies
 
 | Dependency | Purpose | Notes |
@@ -673,12 +849,13 @@ Inspired by [agency-agents](https://github.com/msitarzewski/agency-agents) patte
 
 ## Open Questions
 
-1. **Canopy reliability** — Canopy has ~255 GitHub stars. Need to evaluate stability for production use. Fallback: build thin SQLite + REST layer ourselves.
-2. **Token cost modeling** — need to estimate cost of running a 10-agent org for a day. Triage calls (haiku) are cheap; main work (sonnet/opus) is expensive.
-3. **Concurrent agent limits** — how many Claude CLI processes can run simultaneously? API rate limits?
-4. **Memory search quality** — need to evaluate hybrid BM25 + vector vs pure vector for agent memory retrieval.
-5. **Canopy MCP integration** — need to verify Canopy's MCP server supports all required operations or if we need a custom wrapper.
-6. **Agent-to-external-repo workflow** — how exactly does an agent clone, branch, and PR on a GitHub repo from within its Claude CLI session? Need to prototype.
+1. **Canopy reliability** — Canopy has ~255 GitHub stars. Need to evaluate stability for production use. Fallback: SqliteProvider implementation behind ICommsProvider interface.
+2. **Concurrent agent limits** — how many Claude CLI processes can run simultaneously? Anthropic API rate limits per account?
+3. **Memory search quality** — need to evaluate hybrid BM25 + vector vs pure vector for agent memory retrieval.
+4. **Canopy MCP integration** — need to verify Canopy's MCP server supports all required operations or if we need a custom MCP wrapper.
+5. **Agent-to-external-repo workflow** — how exactly does an agent clone, branch, and PR on a GitHub repo from within its Claude CLI session? Need to prototype.
+6. **Symlinked skills** — verify Claude CLI discovers skills correctly via symlinks. If not, the orchestrator will need to copy skill files into each agent's `.claude/skills/` directory.
+7. **Deep org latency** — in a deep hierarchy (CEO > VP > Director > Lead > Engineer), a task must cascade through 4 levels. Consider a maximum recommended depth (3-4 levels) and skip-level communication channels for urgent matters.
 
 ## Inspiration & References
 
