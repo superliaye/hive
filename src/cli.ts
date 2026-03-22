@@ -1,6 +1,11 @@
 import { Command } from 'commander';
 import { parseOrgTree } from './org/parser.js';
 import { AgentStateStore } from './state/agent-state.js';
+import { SqliteCommsProvider } from './comms/sqlite-provider.js';
+import { ChannelManager } from './comms/channel-manager.js';
+import { MessageGateway } from './comms/message-gateway.js';
+import { AuditStore } from './audit/store.js';
+import { chatAction, observeAction, formatMessage, startFollowing } from './comms/cli-commands.js';
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs';
@@ -20,6 +25,14 @@ function getDataDir(): string {
     fs.mkdirSync(dataDir, { recursive: true });
   }
   return dataDir;
+}
+
+function getCommsProvider(): SqliteCommsProvider {
+  return new SqliteCommsProvider(path.join(getDataDir(), 'comms.db'));
+}
+
+function getAuditStore(): AuditStore {
+  return new AuditStore(path.join(getDataDir(), 'audit.db'));
 }
 
 const program = new Command();
@@ -94,6 +107,116 @@ program
   .description('Graceful shutdown')
   .action(async () => {
     console.log('hive stop — not yet implemented (see Plan 3)');
+  });
+
+program
+  .command('chat')
+  .description('Send a message to the CEO via #board')
+  .argument('<message>', 'Message to send to the CEO')
+  .action(async (message: string) => {
+    const provider = getCommsProvider();
+    const auditStore = getAuditStore();
+    const gateway = new MessageGateway(provider, auditStore);
+    const orgDir = getOrgDir();
+
+    // Ensure #board channel exists
+    const channelManager = new ChannelManager(provider);
+    const org = await parseOrgTree(orgDir);
+    await channelManager.syncFromOrgTree(org);
+
+    // Find CEO directory
+    const ceoConfig = org.root;
+    if (!ceoConfig) {
+      console.error(chalk.red('No CEO found in org tree.'));
+      provider.close();
+      auditStore.close();
+      process.exit(1);
+    }
+
+    console.log(chalk.dim(`> super-user: ${message}`));
+    console.log(chalk.dim('Waiting for CEO response...\n'));
+
+    try {
+      const result = await chatAction({
+        message,
+        gateway,
+        provider,
+        ceoDir: ceoConfig.dir,
+      });
+
+      if (result.ceoResponse) {
+        console.log(chalk.bold.cyan('CEO: ') + result.ceoResponse.content);
+      } else {
+        console.log(chalk.yellow('CEO did not respond.'));
+      }
+    } catch (err: any) {
+      console.error(chalk.red(`Error: ${err.message}`));
+    } finally {
+      provider.close();
+      auditStore.close();
+    }
+  });
+
+program
+  .command('observe')
+  .description('Watch a channel\'s messages (tail -f style)')
+  .argument('<channel>', 'Channel name to observe (without #)')
+  .option('-n, --limit <number>', 'Number of recent messages to show', '20')
+  .option('-f, --follow', 'Follow new messages in real-time', false)
+  .action(async (channel: string, opts: { limit: string; follow: boolean }) => {
+    const provider = getCommsProvider();
+    const auditStore = getAuditStore();
+    const gateway = new MessageGateway(provider, auditStore);
+    const limit = parseInt(opts.limit, 10);
+
+    console.log(chalk.underline(`\n#${channel}\n`));
+
+    try {
+      // Show existing messages
+      const result = await observeAction({
+        channel,
+        gateway,
+        follow: opts.follow,
+        limit,
+      });
+
+      if (result.formatted) {
+        console.log(result.formatted);
+      } else {
+        console.log(chalk.dim('(no messages)'));
+      }
+
+      // Follow mode: poll for new messages
+      if (opts.follow) {
+        console.log(chalk.dim('\n--- following (Ctrl+C to stop) ---\n'));
+
+        const controller = startFollowing(
+          channel,
+          gateway,
+          (formatted) => console.log(formatted),
+          1000,
+        );
+
+        // Handle Ctrl+C gracefully
+        process.on('SIGINT', () => {
+          controller.abort();
+          console.log(chalk.dim('\nStopped observing.'));
+          provider.close();
+          auditStore.close();
+          process.exit(0);
+        });
+
+        // Keep the process alive
+        await new Promise(() => {});
+      }
+    } catch (err: any) {
+      console.error(chalk.red(`Error: ${err.message}`));
+    } finally {
+      if (!opts.follow) {
+        provider.close();
+        auditStore.close();
+      }
+    }
   });
 
 program.parse();
