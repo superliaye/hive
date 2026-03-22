@@ -115,6 +115,9 @@ hive/
 │       ├── memory-search/SKILL.md       # Semantic memory search
 │       ├── memory-index/SKILL.md        # Index new memories
 │       └── org-directory/SKILL.md       # Query org chart
+├── data/                            # gitignored — runtime databases
+│   ├── audit.db                     # Execution log (SQLite)
+│   └── orchestrator.db              # Agent state tracking (SQLite)
 ├── docs/
 │   └── specs/
 └── package.json
@@ -351,6 +354,8 @@ Two implementations planned:
 #design-exploration → designer's proactive research
 ```
 
+**Channel naming rule:** Channels are named `#<parent>-<team>` to avoid collisions. E.g., `org/ceo/engineering/backend/` → `#eng-backend`, `org/ceo/product/analytics/` → `#product-analytics`. The orchestrator derives names from the two most significant path segments.
+
 **Channel → folder sync:** When the orchestrator detects a new team folder in org/, it auto-creates the corresponding channel and joins the team's agents.
 
 ### Agent Discovery
@@ -431,22 +436,18 @@ Reads ranked messages against agent's PRIORITIES.md + BUREAU.md. Classifies each
 | **NOTE** | Extract key info, append to MEMORY.md or memory/today.md. No action. |
 | **IGNORE** | Mark as read. Drop silently. Trivial or irrelevant. |
 
-Triage invocation (orchestrator `cd`s into agent directory first):
-```bash
-cd /path/to/org/ceo/engineering/vp-eng/backend/engineer-1 && \
-cat ranked-messages.json | claude -p \
-  --model haiku \
-  --system-prompt "$(cat ../../../../../../skills/shared/gateway-triage/SKILL.md)" \
-  --append-system-prompt "$(cat PRIORITIES.md)" \
-  --append-system-prompt "$(cat BUREAU.md)" \
-  --output-format json
-```
+The orchestrator assembles the full system prompt in TypeScript and invokes Claude CLI in print mode:
 
-In practice, the orchestrator assembles the system prompt and input as strings in TypeScript, then spawns:
 ```typescript
+const triagePrompt = [
+  readFile(skillsDir + '/shared/gateway-triage/SKILL.md'),
+  readFile(agentDir + '/PRIORITIES.md'),
+  readFile(agentDir + '/BUREAU.md'),
+].join('\n---\n');
+
 const result = await spawn('claude', [
   '-p', '--model', 'haiku',
-  '--system-prompt', assembledTriagePrompt,
+  '--system-prompt', triagePrompt,
   '--output-format', 'json',
 ], { cwd: agentDir, input: rankedMessagesJson });
 ```
@@ -498,12 +499,9 @@ const result = await spawn('claude', [
   '--allowedTools', agent.tools.join(','),  // from IDENTITY.md frontmatter
 ], { cwd: agentDir, input: taskOrMessages });
 
-// For interactive (persistent) agents:
-// The orchestrator spawns claude without -p, manages stdin/stdout
-const proc = spawn('claude', [
-  '--system-prompt', systemPrompt,
-  '--allowedTools', agent.tools.join(','),
-], { cwd: agentDir, stdio: 'pipe' });
+// Persistent agents are NOT long-running processes.
+// They are invoked repeatedly on a heartbeat schedule.
+// Each invocation is a fresh -p call; continuity comes from md files.
 ```
 
 MCP servers (Canopy, org-directory) are configured in the agent's `.claude/settings.json`, not via CLI flags. Claude CLI discovers them automatically from the working directory.
@@ -535,7 +533,7 @@ CREATE TABLE agent_state (
 ```
 
 **On `hive start`:**
-1. Check for previous dirty shutdown (stale PIDs in agent_state)
+1. Check for previous dirty shutdown: for each agent with status='working', check if PID is still alive (`process.kill(pid, 0)` in Node). If dead → stale.
 2. For each stale agent: mark as idle, let next heartbeat cycle resume naturally
 3. Agent's PRIORITIES.md and memory/ files preserve context — no work is lost
 
