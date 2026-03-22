@@ -98,15 +98,95 @@ program
 program
   .command('start')
   .description('Wake the organization')
-  .action(async () => {
-    console.log('hive start — not yet implemented (see Plan 3)');
+  .option('--persistent-interval <ms>', 'Heartbeat interval for persistent agents (ms)', '600000')
+  .option('--on-demand-interval <ms>', 'Heartbeat interval for on-demand agents (ms)', '7200000')
+  .action(async (opts) => {
+    const orgDir = getOrgDir();
+    const dataDir = getDataDir();
+    const { Orchestrator } = await import('./orchestrator/orchestrator.js');
+    const { buildStartConfig } = await import('./orchestrator/cli-helpers.js');
+    const { PidFile } = await import('./orchestrator/pid-file.js');
+
+    // Check if already running
+    const pidFile = new PidFile(path.join(dataDir, 'hive.pid'));
+    if (pidFile.isRunning()) {
+      console.error(chalk.red(`Hive is already running (PID: ${pidFile.read()}). Use \`hive stop\` first.`));
+      process.exit(1);
+    }
+
+    console.log(chalk.blue('Parsing org tree...'));
+    const orgChart = await parseOrgTree(orgDir);
+    console.log(chalk.dim(`Found ${orgChart.agents.size} agents, ${orgChart.channels.length} channels`));
+
+    // Auto-wire comms provider from SQLite
+    const commsDb = path.join(dataDir, 'comms.db');
+    const commsProvider = new SqliteCommsProvider(commsDb);
+    const channelManager = new ChannelManager(commsProvider);
+
+    // Sync channels from the org tree so all org-defined channels exist in the DB
+    await channelManager.syncFromOrgTree(orgChart);
+
+    const config = buildStartConfig({
+      orgChart,
+      dataDir,
+      persistentIntervalMs: parseInt(opts.persistentInterval, 10),
+      onDemandIntervalMs: parseInt(opts.onDemandInterval, 10),
+      commsProvider: {
+        getUnread: (agentId) => commsProvider.getUnread(agentId),
+        markRead: (agentId, messageIds) => commsProvider.markRead(agentId, messageIds),
+        postMessage: (agentId, channel, content, opts) =>
+          commsProvider.postMessage(agentId, channel, content, opts),
+      },
+    });
+
+    const orchestrator = new Orchestrator(config);
+    await orchestrator.start();
+
+    console.log(chalk.green(`Hive started (PID: ${process.pid})`));
+    console.log(chalk.dim(`Persistent agents: ${config.persistentAgentIds.join(', ') || 'none'}`));
+    console.log(chalk.dim(`On-demand agents: ${Array.from(orgChart.agents.keys()).filter(id => !config.persistentAgentIds.includes(id)).join(', ') || 'none'}`));
+
+    // Keep the process alive
+    const shutdown = async (signal: string) => {
+      console.log(chalk.yellow(`\nReceived ${signal}. Shutting down gracefully...`));
+      await orchestrator.stop();
+      console.log(chalk.green('Hive stopped.'));
+      process.exit(0);
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
   });
 
 program
   .command('stop')
   .description('Graceful shutdown')
   .action(async () => {
-    console.log('hive stop — not yet implemented (see Plan 3)');
+    const dataDir = getDataDir();
+    const { PidFile } = await import('./orchestrator/pid-file.js');
+
+    const pidFile = new PidFile(path.join(dataDir, 'hive.pid'));
+    const pid = pidFile.read();
+
+    if (!pid) {
+      console.log(chalk.yellow('No hive.pid file found. Hive may not be running.'));
+      process.exit(0);
+    }
+
+    if (!pidFile.isRunning()) {
+      console.log(chalk.yellow(`Stale PID file found (PID: ${pid} is dead). Cleaning up.`));
+      pidFile.remove();
+      process.exit(0);
+    }
+
+    console.log(chalk.blue(`Sending SIGTERM to Hive process (PID: ${pid})...`));
+    try {
+      process.kill(pid, 'SIGTERM');
+      console.log(chalk.green('Shutdown signal sent. Hive will stop after completing in-flight work.'));
+    } catch (err) {
+      console.error(chalk.red(`Failed to send signal: ${err instanceof Error ? err.message : err}`));
+      process.exit(1);
+    }
   });
 
 program
