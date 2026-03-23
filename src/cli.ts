@@ -8,6 +8,7 @@ import { HiveContext } from './context.js';
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 // Lightweight helpers for commands that don't need full HiveContext
 function getOrgDir(): string {
@@ -277,6 +278,42 @@ program
         ctx.close();
       }
     }
+  });
+
+program
+  .command('dashboard')
+  .description('Open the Hive dashboard in your browser')
+  .option('-p, --port <port>', 'Port number', '3001')
+  .option('--no-open', 'Do not auto-open browser')
+  .action(async (opts) => {
+    const port = parseInt(opts.port, 10);
+    const serverScript = path.resolve(
+      fileURLToPath(import.meta.url),
+      '../../packages/dashboard/src/server/index.ts',
+    );
+
+    // Use tsx to run the server TypeScript directly in dev
+    const { fork } = await import('child_process');
+    const child = fork(serverScript, [], {
+      execArgv: ['--import', 'tsx'],
+      env: { ...process.env, PORT: String(port) },
+      stdio: 'inherit',
+    });
+
+    if (opts.open !== false) {
+      // Wait briefly for server to start, then open browser
+      setTimeout(async () => {
+        const { exec } = await import('child_process');
+        exec(`open http://localhost:${port}`);
+      }, 1500);
+    }
+
+    process.on('SIGINT', () => {
+      child.kill('SIGTERM');
+      process.exit(0);
+    });
+
+    await new Promise(() => {}); // Keep alive
   });
 
 program.parse();

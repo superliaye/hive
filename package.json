@@ -3,8 +3,17 @@
   "version": "0.1.0",
   "description": "Self-organizing company of AI agents",
   "type": "module",
+  "workspaces": ["packages/*"],
   "bin": {
     "hive": "./bin/hive"
+  },
+  "exports": {
+    "./context.js": "./dist/context.js",
+    "./types.js": "./dist/types.js",
+    "./org/parser.js": "./dist/org/parser.js",
+    "./comms/cli-commands.js": "./dist/comms/cli-commands.js",
+    "./comms/message-gateway.js": "./dist/comms/message-gateway.js",
+    "./orchestrator/pid-file.js": "./dist/orchestrator/pid-file.js"
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
