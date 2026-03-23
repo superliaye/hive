@@ -1,2 +1,5 @@
 #!/usr/bin/env node
-import('../dist/cli.js');
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+import(resolve(__dirname, '../dist/cli.js'));

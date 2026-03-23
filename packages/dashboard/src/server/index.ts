@@ -26,7 +26,7 @@ export async function createServer(opts: { port: number; cwd?: string }) {
   // Serve static files in production
   const clientDir = path.resolve(__dirname, '../client');
   app.use(express.static(clientDir));
-  app.get('*', (_req, res) => {
+  app.get('/{*path}', (_req, res) => {
     res.sendFile(path.join(clientDir, 'index.html'));
   });
 

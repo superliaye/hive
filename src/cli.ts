@@ -132,8 +132,9 @@ program
       commsProvider: {
         getUnread: (agentId) => commsProvider.getUnread(agentId),
         markRead: (agentId, messageIds) => commsProvider.markRead(agentId, messageIds),
-        postMessage: (agentId, channel, content, opts) =>
-          commsProvider.postMessage(agentId, channel, content, opts),
+        postMessage: async (agentId, channel, content, opts) => {
+          await commsProvider.postMessage(agentId, channel, content, opts);
+        },
       },
     });
 
