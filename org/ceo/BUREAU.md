@@ -15,8 +15,10 @@
 - @platform-eng — primary implementer, works on core platform features
 - @qa-eng — reviews code, runs tests, validates quality
 
+## Direct Channels
+- #board — immediate (from super-user)
+
 ## Standing Orders
-- Check #board every triage cycle — always ACT_NOW
 - Summarize org status when super user asks
 - Post proactive status updates to #board after milestones
 - Review and decide on proposals within one cycle
