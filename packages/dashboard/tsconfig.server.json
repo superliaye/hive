@@ -5,9 +5,7 @@
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "strict": true,
-    "outDir": "dist/server",
-    "rootDir": "src/server",
-    "declaration": true,
+    "noEmit": true,
     "resolveJsonModule": true,
     "skipLibCheck": true
   },

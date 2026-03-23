@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { HiveContext } from '../../../../src/context.js';
 import { createApiRouter } from './router.js';
@@ -23,12 +24,19 @@ export async function createServer(opts: { port: number; cwd?: string }) {
   // Start SSE polling
   sse.startPolling();
 
-  // Serve static files in production
-  const clientDir = path.resolve(__dirname, '../client');
-  app.use(express.static(clientDir));
-  app.get('/{*path}', (_req, res) => {
-    res.sendFile(path.join(clientDir, 'index.html'));
-  });
+  // Serve static files from Vite build output
+  const dashboardRoot = path.resolve(__dirname, '../..');
+  const clientDir = path.join(dashboardRoot, 'dist', 'client');
+  if (fs.existsSync(clientDir)) {
+    app.use(express.static(clientDir));
+    app.get('/{*path}', (_req, res) => {
+      res.sendFile(path.join(clientDir, 'index.html'));
+    });
+  } else {
+    app.get('/{*path}', (_req, res) => {
+      res.status(503).send('Dashboard not built. Run: npm run -w @hive/dashboard dev (for dev) or npm run -w @hive/dashboard build (for prod)');
+    });
+  }
 
   const server = app.listen(opts.port, () => {
     console.log(`Hive Dashboard running at http://localhost:${opts.port}`);
