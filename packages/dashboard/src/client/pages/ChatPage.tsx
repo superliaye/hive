@@ -26,8 +26,11 @@ export function ChatPage() {
     }
   }, [setData]));
 
-  useSSEEvent('ceo-working', useCallback((event: any) => {
-    setCeoWorking(event.status === 'started');
+  // Track CEO working status via agent-state SSE events (set by daemon)
+  useSSEEvent('agent-state', useCallback((event: any) => {
+    if (event.agentId === 'ceo') {
+      setCeoWorking(event.status === 'working');
+    }
   }, []));
 
   const sendMessage = async (text: string) => {

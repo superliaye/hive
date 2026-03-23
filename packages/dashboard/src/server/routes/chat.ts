@@ -1,15 +1,11 @@
 import { Router } from 'express';
 import type { HiveContext } from '../../../../../src/context.js';
-import { chatAction } from '../../../../../src/comms/cli-commands.js';
-import { MessageGateway } from '../../../../../src/comms/message-gateway.js';
 import type { SSEManager } from '../sse.js';
 
 export function createChatRoutes(ctx: HiveContext, sse: SSEManager): Router {
   const router = Router();
 
-  let ceoWorking = false;
-
-  // POST /api/chat — send message to CEO
+  // POST /api/chat — post message to #board, daemon handles the rest
   router.post('/', async (req, res) => {
     const { message } = req.body;
     if (!message || typeof message !== 'string') {
@@ -17,40 +13,19 @@ export function createChatRoutes(ctx: HiveContext, sse: SSEManager): Router {
       return;
     }
 
-    // If CEO is already working, queue the message
-    const ceoState = ctx.state.get(ctx.orgChart.root.id);
-    if (ceoState?.status === 'working' || ceoWorking) {
-      await ctx.comms.postMessage('board', 'super-user', message);
-      res.status(202).json({ queued: true, message: 'CEO is busy. Message queued.' });
-      return;
-    }
-
-    ceoWorking = true;
-    sse.emitCeoWorking('started');
-
     try {
-      const gateway = new MessageGateway(ctx.comms, ctx.audit);
-      const result = await chatAction({
-        message,
-        gateway,
-        provider: ctx.comms,
-        ceoDir: ctx.orgChart.root.dir,
-      });
+      const userMessage = await ctx.comms.postMessage('board', 'super-user', message);
 
+      // CEO status is tracked via agent-state SSE polling —
+      // the daemon will set CEO to 'working' when it processes the message
       res.json({
-        queued: false,
-        response: result.ceoResponse ? {
-          content: result.ceoResponse.content,
-          timestamp: result.ceoResponse.timestamp.toISOString(),
-        } : null,
-        debug: result.ceoResponse ? undefined : 'CEO produced no response — check that claude CLI is available',
+        posted: true,
+        messageId: userMessage.id,
+        note: 'Message posted to #board. CEO will respond via daemon.',
       });
     } catch (err: any) {
       console.error('[chat] Error:', err.message);
       res.status(500).json({ error: err.message });
-    } finally {
-      ceoWorking = false;
-      sse.emitCeoWorking('completed');
     }
   });
 
