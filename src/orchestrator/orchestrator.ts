@@ -1,3 +1,11 @@
+/**
+ * @deprecated Use {@link import('../daemon/daemon.js').Daemon} instead.
+ * The Orchestrator is replaced by the Daemon gateway architecture which provides:
+ * - Per-agent work lanes (concurrency=1) instead of raw interval scheduling
+ * - Direct channel triggers with coalesced debouncing
+ * - Zero LLM cost when inbox is empty
+ * - Agent-owned PRIORITIES.md management
+ */
 import type { AgentConfig, OrgChart } from '../types.js';
 import { AgentStateStore } from '../state/agent-state.js';
 import { PidFile } from './pid-file.js';

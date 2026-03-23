@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use {@link import('../daemon/check-work.js').checkWork} instead.
+ * The heartbeat pipeline is replaced by the daemon's CheckWork routine.
+ */
 import type { AgentConfig } from '../types.js';
 import type { ScoredMessage, TriageResult } from '../gateway/types.js';
 import { DEFAULT_SCORING_WEIGHTS } from '../gateway/types.js';
