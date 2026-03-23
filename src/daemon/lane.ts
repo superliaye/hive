@@ -9,6 +9,7 @@ export class Lane {
   private readonly maxConcurrent: number;
   private _active = 0;
   private queue: Array<{ task: () => Promise<unknown>; resolve: (v: unknown) => void; reject: (e: unknown) => void }> = [];
+  private drainResolvers: Array<() => void> = [];
 
   constructor(id: string, maxConcurrent = 1) {
     this.id = id;
@@ -26,8 +27,16 @@ export class Lane {
   }
 
   async drain(): Promise<void> {
-    while (this._active > 0 || this.queue.length > 0) {
-      await new Promise(r => setTimeout(r, 5));
+    if (this._active === 0 && this.queue.length === 0) return;
+    return new Promise<void>(resolve => {
+      this.drainResolvers.push(resolve);
+    });
+  }
+
+  private notifyDrain(): void {
+    if (this._active === 0 && this.queue.length === 0) {
+      const resolvers = this.drainResolvers.splice(0);
+      for (const resolve of resolvers) resolve();
     }
   }
 
@@ -41,6 +50,7 @@ export class Lane {
         .finally(() => {
           this._active--;
           this.flush();
+          this.notifyDrain();
         });
     }
   }
