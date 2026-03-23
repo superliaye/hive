@@ -96,13 +96,13 @@ program
 program
   .command('start')
   .description('Wake the organization')
-  .option('--persistent-interval <ms>', 'Heartbeat interval for persistent agents (ms)', '600000')
-  .option('--on-demand-interval <ms>', 'Heartbeat interval for on-demand agents (ms)', '7200000')
+  .option('--tick-interval <ms>', 'Tick interval for periodic agent checks (ms)', '600000')
   .action(async (opts) => {
     const orgDir = getOrgDir();
     const dataDir = getDataDir();
-    const { Orchestrator } = await import('./orchestrator/orchestrator.js');
-    const { buildStartConfig } = await import('./orchestrator/cli-helpers.js');
+    const { Daemon } = await import('./daemon/daemon.js');
+    const { AgentStateStore } = await import('./state/agent-state.js');
+    const { AuditStore } = await import('./audit/store.js');
     const { PidFile } = await import('./orchestrator/pid-file.js');
 
     // Check if already running
@@ -120,35 +120,45 @@ program
     const commsDb = path.join(dataDir, 'comms.db');
     const commsProvider = new SqliteCommsProvider(commsDb);
     const channelManager = new ChannelManager(commsProvider);
+    const stateStore = new AgentStateStore(path.join(dataDir, 'orchestrator.db'));
+    const auditStore = new AuditStore(path.join(dataDir, 'audit.db'));
 
     // Sync channels from the org tree so all org-defined channels exist in the DB
     await channelManager.syncFromOrgTree(orgChart);
 
-    const config = buildStartConfig({
+    const daemon = new Daemon({
       orgChart,
+      comms: commsProvider,
+      audit: auditStore,
+      state: stateStore,
+      channelManager,
       dataDir,
-      persistentIntervalMs: parseInt(opts.persistentInterval, 10),
-      onDemandIntervalMs: parseInt(opts.onDemandInterval, 10),
-      commsProvider: {
-        getUnread: (agentId) => commsProvider.getUnread(agentId),
-        markRead: (agentId, messageIds) => commsProvider.markRead(agentId, messageIds),
-        postMessage: async (agentId, channel, content, opts) => {
-          await commsProvider.postMessage(agentId, channel, content, opts);
-        },
-      },
+      orgDir,
+      pidFilePath: path.join(dataDir, 'hive.pid'),
+      tickIntervalMs: parseInt(opts.tickInterval, 10),
     });
 
-    const orchestrator = new Orchestrator(config);
-    await orchestrator.start();
+    await daemon.start();
 
-    console.log(chalk.green(`Hive started (PID: ${process.pid})`));
-    console.log(chalk.dim(`Persistent agents: ${config.persistentAgentIds.join(', ') || 'none'}`));
-    console.log(chalk.dim(`On-demand agents: ${Array.from(orgChart.agents.keys()).filter(id => !config.persistentAgentIds.includes(id)).join(', ') || 'none'}`));
+    // Hook: signal daemon on every new message for direct channel detection
+    const originalPostMessage = commsProvider.postMessage.bind(commsProvider);
+    commsProvider.postMessage = async (channel: string, sender: string, content: string, postOpts?: { thread?: string }) => {
+      const msg = await originalPostMessage(channel, sender, content, postOpts);
+      daemon.signalChannel(channel);
+      return msg;
+    };
+
+    console.log(chalk.green(`Hive daemon started (PID: ${process.pid})`));
+    console.log(chalk.dim(`Agents: ${Array.from(orgChart.agents.keys()).join(', ')}`));
+    console.log(chalk.dim(`Tick interval: ${opts.tickInterval}ms`));
 
     // Keep the process alive
     const shutdown = async (signal: string) => {
       console.log(chalk.yellow(`\nReceived ${signal}. Shutting down gracefully...`));
-      await orchestrator.stop();
+      await daemon.stop();
+      stateStore.close();
+      commsProvider.close();
+      auditStore.close();
       console.log(chalk.green('Hive stopped.'));
       process.exit(0);
     };
@@ -196,29 +206,16 @@ program
     const ctx = await HiveContext.create();
     const gateway = new MessageGateway(ctx.comms, ctx.audit);
 
-    const ceoConfig = ctx.orgChart.root;
-    if (!ceoConfig) {
-      console.error(chalk.red('No CEO found in org tree.'));
-      ctx.close();
-      process.exit(1);
-    }
-
     console.log(chalk.dim(`> super-user: ${message}`));
-    console.log(chalk.dim('Waiting for CEO response...\n'));
 
     try {
       const result = await chatAction({
         message,
         gateway,
-        provider: ctx.comms,
-        ceoDir: ceoConfig.dir,
       });
 
-      if (result.ceoResponse) {
-        console.log(chalk.bold.cyan('CEO: ') + result.ceoResponse.content);
-      } else {
-        console.log(chalk.yellow('CEO did not respond.'));
-      }
+      console.log(chalk.green(`Message posted to #board.`));
+      console.log(chalk.dim(`CEO will respond via daemon. Run: hive observe board -f`));
     } catch (err: any) {
       console.error(chalk.red(`Error: ${err.message}`));
     } finally {
