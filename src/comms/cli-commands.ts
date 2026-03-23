@@ -70,6 +70,8 @@ export async function chatAction(opts: ChatActionOpts): Promise<ChatActionResult
   let ceoResponse: Message | undefined;
   if (result.exitCode === 0 && result.stdout.trim()) {
     ceoResponse = await gateway.postMessage('board', 'ceo', result.stdout.trim());
+  } else if (result.exitCode !== 0) {
+    console.error(`[chatAction] claude exited ${result.exitCode}: ${result.stderr.slice(0, 500)}`);
   }
 
   return { userMessage, ceoResponse };

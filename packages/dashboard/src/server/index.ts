@@ -8,6 +8,9 @@ import { SSEManager } from './sse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Allow the dashboard to spawn claude CLI even when launched from within Claude Code
+delete process.env.CLAUDECODE;
+
 export async function createServer(opts: { port: number; cwd?: string }) {
   const ctx = await HiveContext.create(opts.cwd);
   const app = express();

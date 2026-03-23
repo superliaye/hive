@@ -38,9 +38,9 @@ export function StatusDot({ status }: { status: string }) {
 
 export function timeAgo(dateStr: string | undefined): string {
   if (!dateStr) return 'never';
-  const ms = Date.now() - new Date(dateStr).getTime();
+  const ms = Math.max(0, Date.now() - new Date(dateStr).getTime());
   const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}s ago`;
+  if (s < 60) return s === 0 ? 'just now' : `${s}s ago`;
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);

@@ -43,8 +43,10 @@ export function createChatRoutes(ctx: HiveContext, sse: SSEManager): Router {
           content: result.ceoResponse.content,
           timestamp: result.ceoResponse.timestamp.toISOString(),
         } : null,
+        debug: result.ceoResponse ? undefined : 'CEO produced no response — check that claude CLI is available',
       });
     } catch (err: any) {
+      console.error('[chat] Error:', err.message);
       res.status(500).json({ error: err.message });
     } finally {
       ceoWorking = false;
