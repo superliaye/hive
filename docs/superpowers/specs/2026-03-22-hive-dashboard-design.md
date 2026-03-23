@@ -61,6 +61,14 @@ export class HiveContext {
 
 Both the orchestrator and dashboard create a `HiveContext` pointing at the same `data/` directory. SQLite WAL mode handles concurrent reads (dashboard) + writes (orchestrator).
 
+**DB paths:** `state` uses `data/orchestrator.db` (same file the orchestrator writes to), `audit` uses `data/audit.db`, `comms` uses `data/comms.db`. The `create()` factory resolves these paths from `dataDir`.
+
+**Monorepo setup:** Root `package.json` needs `"workspaces": ["packages/*"]` added. The dashboard package imports from core via workspace reference or relative path (`../../src/context.js`).
+
+**Serialization note:** `OrgChart.agents` is a `Map` — API routes must convert to a plain array/object before JSON serialization.
+
+**Live file reads:** The `GET /api/agents/:id` endpoint re-reads agent md files from disk (not from cached `AgentConfig.files`) so it always shows the latest content, even if agents have self-modified their files.
+
 ---
 
 ## Package Structure
@@ -409,13 +417,13 @@ Full audit view with filtering and cost breakdown.
 | GET | `/api/agents/:id` | Single agent: state + all md files + recent invocations + token totals |
 | GET | `/api/channels` | List all channels with member counts |
 | GET | `/api/channels/:name/messages` | Messages in channel. Query: `?limit=50&since=ISO` |
-| GET | `/api/audit` | Invocation log. Query: `?agentId=&type=&since=&limit=` |
+| GET | `/api/audit` | Invocation log. Query: `?agentId=&type=&since=&limit=`. Note: `AuditStore.getInvocations()` needs extending to support `invocationType` filter |
 | GET | `/api/audit/totals` | Token totals. Query: `?agentId=` |
-| POST | `/api/chat` | Body: `{ message: string }`. Posts to #board, spawns CEO, returns response |
+| POST | `/api/chat` | Body: `{ message: string }`. Posts to #board, spawns CEO, returns response. If CEO is currently working (status=working), queues the message and returns 202 — the CEO will pick it up on next heartbeat. Emits `ceo-working` SSE events for typing indicator |
 | GET | `/api/events` | SSE stream. Events: `agent-state`, `new-message`, `heartbeat`, `ceo-working` |
 | GET | `/api/status` | Orchestrator status (running, PID, uptime, agent count) |
-| POST | `/api/orchestrator/start` | Start the orchestrator |
-| POST | `/api/orchestrator/stop` | Stop the orchestrator |
+| POST | `/api/orchestrator/start` | Start the orchestrator as a detached child process (`hive start`). Checks `data/hive.pid` first — returns 409 if already running |
+| POST | `/api/orchestrator/stop` | Stop the orchestrator by sending SIGTERM to the PID in `data/hive.pid`. Returns 404 if not running |
 
 ---
 
@@ -525,3 +533,26 @@ Tracked at: https://github.com/superliaye/hive/issues
 | 6 | Orchestrator controls | P1 |
 | 7 | Live heartbeat indicators | P1 |
 | 8 | Channel unread badges | P2 |
+
+---
+
+## Error Handling
+
+- **API errors**: All endpoints return structured `{ error: string }` responses with appropriate HTTP codes. React UI shows toast notifications for transient errors.
+- **SSE disconnection**: `EventSource` auto-reconnects. UI shows a "Reconnecting..." banner when the connection drops, clears when it resumes.
+- **Orchestrator not running**: Dashboard works in read-only mode. Chat shows "Orchestrator is not running — CEO cannot respond" with a start button. Org chart and channel history still work (reads from DB).
+- **Empty state**: Each page handles zero-data gracefully. "No messages yet" for channels, "No invocations recorded" for audit, etc.
+
+---
+
+## Unread Badges
+
+Channel unread badges (P2) require tracking the super user's read position. Implementation: register a synthetic `super-user` agent ID in the `read_receipts` table. When the dashboard opens a channel, call `markRead('super-user', messageIds)`. Use `getUnread('super-user')` grouped by channel for badge counts.
+
+---
+
+## SSE Polling Notes
+
+- `better-sqlite3` queries are synchronous and block the Express event loop briefly. For expected data volumes (<10K rows), this is negligible.
+- SSE diff queries should include `LIMIT` and time-window filters to stay fast as tables grow.
+- The `ceo-working` SSE event is emitted by the `POST /api/chat` handler (started/completed), not by DB polling.
