@@ -85,13 +85,17 @@ export class AuditStore {
     return id;
   }
 
-  getInvocations(filter: { agentId?: string; since?: Date; limit?: number }): InvocationRow[] {
+  getInvocations(filter: { agentId?: string; invocationType?: string; since?: Date; limit?: number }): InvocationRow[] {
     let sql = 'SELECT * FROM invocations WHERE 1=1';
     const params: unknown[] = [];
 
     if (filter.agentId) {
       sql += ' AND agent_id = ?';
       params.push(filter.agentId);
+    }
+    if (filter.invocationType) {
+      sql += ' AND invocation_type = ?';
+      params.push(filter.invocationType);
     }
     if (filter.since) {
       sql += ' AND timestamp >= ?';

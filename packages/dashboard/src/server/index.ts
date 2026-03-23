@@ -2,17 +2,26 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { HiveContext } from '../../../../src/context.js';
+import { createApiRouter } from './router.js';
+import { SSEManager } from './sse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function createServer(opts: { port: number; cwd?: string }) {
   const ctx = await HiveContext.create(opts.cwd);
   const app = express();
+  const sse = new SSEManager(ctx);
 
   app.use(express.json());
 
-  // API routes will be mounted in Task 3:
-  // app.use('/api', createApiRouter(ctx));
+  // SSE endpoint (before router to avoid wildcard catch)
+  app.get('/api/events', (req, res) => sse.addClient(req, res));
+
+  // API routes
+  app.use('/api', createApiRouter(ctx, sse));
+
+  // Start SSE polling
+  sse.startPolling();
 
   // Serve static files in production
   const clientDir = path.resolve(__dirname, '../client');
@@ -26,11 +35,12 @@ export async function createServer(opts: { port: number; cwd?: string }) {
   });
 
   process.on('SIGTERM', () => {
+    sse.stopPolling();
     ctx.close();
     server.close();
   });
 
-  return { app, server, ctx };
+  return { app, server, ctx, sse };
 }
 
 // Direct invocation (when run as standalone script)
