@@ -1,10 +1,34 @@
+import { useState, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
+import { useSSEEvent } from '../../hooks/useSSE';
 import { DashboardCard } from '../shared';
 import type { Invocation } from '../../types';
 
 export function AuditSnapshotCard() {
-  const { data: totals } = useApi<{ totalIn: number; totalOut: number }>('/api/audit/totals', { refreshInterval: 10000 });
-  const { data: recent } = useApi<Invocation[]>('/api/audit?limit=5', { refreshInterval: 10000 });
+  const { data: totals, setData: setTotals } = useApi<{ totalIn: number; totalOut: number }>('/api/audit/totals');
+  const { data: recent, setData: setRecent } = useApi<Invocation[]>('/api/audit?limit=5');
+
+  // Real-time: accumulate token counts and prepend new invocations from SSE
+  useSSEEvent('audit-invocation', useCallback((inv: any) => {
+    setTotals(prev => prev ? {
+      totalIn: prev.totalIn + (inv.tokensIn ?? 0),
+      totalOut: prev.totalOut + (inv.tokensOut ?? 0),
+    } : prev);
+    setRecent(prev => {
+      if (!prev) return prev;
+      const entry: Invocation = {
+        id: inv.id,
+        agentId: inv.agentId,
+        invocationType: inv.invocationType,
+        model: inv.model,
+        tokensIn: inv.tokensIn,
+        tokensOut: inv.tokensOut,
+        durationMs: inv.durationMs,
+        timestamp: new Date().toISOString(),
+      };
+      return [entry, ...prev].slice(0, 5);
+    });
+  }, [setTotals, setRecent]));
 
   return (
     <DashboardCard title="Token Usage" icon={'\u25A7'} linkTo="/audit">

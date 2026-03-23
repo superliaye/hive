@@ -1,7 +1,8 @@
 import { useApi } from '../../hooks/useApi';
+import { useSSEEvent } from '../../hooks/useSSE';
 import { DashboardCard, timeAgo } from '../shared';
 import type { Channel, Message } from '../../types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface ChannelPreview {
   name: string;
@@ -26,6 +27,15 @@ export function ChannelActivityCard() {
       })
     ).then(setPreviews);
   }, [channels]);
+
+  // Real-time: update channel previews when new messages arrive via SSE
+  useSSEEvent('new-message', useCallback((event: any) => {
+    setPreviews(prev => prev.map(p =>
+      p.name === event.channel
+        ? { ...p, lastMessage: { id: event.id, sender: event.sender, content: event.content, timestamp: event.timestamp, channel: event.channel } }
+        : p
+    ));
+  }, []));
 
   return (
     <DashboardCard title="Channel Activity" icon={'\u25A3'} linkTo="/channels">

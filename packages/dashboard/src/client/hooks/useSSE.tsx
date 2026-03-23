@@ -20,7 +20,7 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
 
-    const eventTypes = ['agent-state', 'new-message', 'heartbeat', 'ceo-working', 'connected'];
+    const eventTypes = ['agent-state', 'new-message', 'audit-invocation', 'heartbeat', 'connected'];
     for (const type of eventTypes) {
       es.addEventListener(type, (e) => {
         const data = JSON.parse((e as MessageEvent).data);

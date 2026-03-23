@@ -3,6 +3,9 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { HiveContext } from '../../../../src/context.js';
+import { Daemon } from '../../../../src/daemon/daemon.js';
+import { HiveEventBus } from '../../../../src/events/event-bus.js';
+import { PidFile } from '../../../../src/orchestrator/pid-file.js';
 import { createApiRouter } from './router.js';
 import { SSEManager } from './sse.js';
 
@@ -13,8 +16,41 @@ delete process.env.CLAUDECODE;
 
 export async function createServer(opts: { port: number; cwd?: string }) {
   const ctx = await HiveContext.create(opts.cwd);
+  const eventBus = new HiveEventBus();
+
+  // Start daemon in-process if not already running externally
+  let daemon: Daemon | null = null;
+  const pidFile = new PidFile(path.join(ctx.dataDir, 'hive.pid'));
+
+  if (!pidFile.isRunning()) {
+    daemon = new Daemon({
+      orgChart: ctx.orgChart,
+      comms: ctx.comms,
+      audit: ctx.audit,
+      state: ctx.state,
+      channelManager: ctx.channelManager,
+      dataDir: ctx.dataDir,
+      orgDir: ctx.orgDir,
+      pidFilePath: path.join(ctx.dataDir, 'hive.pid'),
+      tickIntervalMs: 600_000,
+    });
+
+    try {
+      await daemon.start();
+      console.log('[dashboard] Daemon started in-process');
+    } catch (err) {
+      console.warn('[dashboard] Could not start daemon:', err instanceof Error ? err.message : err);
+      daemon = null;
+    }
+  } else {
+    console.log('[dashboard] External daemon detected, skipping in-process daemon');
+  }
+
+  // Wire event bus: wrap stores to emit events on mutations
+  wireEventBus(ctx, eventBus, daemon);
+
   const app = express();
-  const sse = new SSEManager(ctx);
+  const sse = new SSEManager(ctx, eventBus);
 
   app.use(express.json());
 
@@ -24,8 +60,8 @@ export async function createServer(opts: { port: number; cwd?: string }) {
   // API routes
   app.use('/api', createApiRouter(ctx, sse));
 
-  // Start SSE polling
-  sse.startPolling();
+  // Start SSE event-driven mode (with slow fallback heartbeat)
+  sse.start();
 
   // Serve static files from Vite build output
   const dashboardRoot = path.resolve(__dirname, '../..');
@@ -45,13 +81,74 @@ export async function createServer(opts: { port: number; cwd?: string }) {
     console.log(`Hive Dashboard running at http://localhost:${opts.port}`);
   });
 
-  process.on('SIGTERM', () => {
-    sse.stopPolling();
+  const shutdown = async () => {
+    sse.stop();
+    if (daemon) {
+      await daemon.stop();
+      console.log('[dashboard] Daemon stopped');
+    }
     ctx.close();
     server.close();
-  });
+  };
 
-  return { app, server, ctx, sse };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
+  return { app, server, ctx, sse, daemon };
+}
+
+/**
+ * Wire the event bus to stores using the wrapper pattern.
+ * After each mutation, emit the corresponding event for real-time SSE push.
+ */
+function wireEventBus(ctx: HiveContext, bus: HiveEventBus, daemon: Daemon | null): void {
+  // Wrap comms.postMessage → emit message:new + signal daemon
+  const originalPostMessage = ctx.comms.postMessage.bind(ctx.comms);
+  ctx.comms.postMessage = async (channel: string, sender: string, content: string, opts?: { thread?: string }) => {
+    const msg = await originalPostMessage(channel, sender, content, opts);
+    bus.emit('message:new', {
+      id: msg.id,
+      channel: msg.channel,
+      sender: msg.sender,
+      content: msg.content,
+      timestamp: msg.timestamp.toISOString(),
+      thread: msg.thread,
+    });
+    if (daemon) {
+      daemon.signalChannel(channel);
+    }
+    return msg;
+  };
+
+  // Wrap state.updateStatus → emit agent:state
+  const originalUpdateStatus = ctx.state.updateStatus.bind(ctx.state);
+  ctx.state.updateStatus = (agentId: string, status: Parameters<typeof originalUpdateStatus>[1], opts?: { pid?: number; currentTask?: string }) => {
+    const result = originalUpdateStatus(agentId, status, opts);
+    bus.emit('agent:state', {
+      agentId,
+      status,
+      currentTask: opts?.currentTask,
+      pid: opts?.pid,
+    });
+    return result;
+  };
+
+  // Wrap audit.logInvocation → emit audit:invocation
+  const originalLogInvocation = ctx.audit.logInvocation.bind(ctx.audit);
+  ctx.audit.logInvocation = (opts: any) => {
+    const id = originalLogInvocation(opts);
+    bus.emit('audit:invocation', {
+      id,
+      agentId: opts.agentId,
+      invocationType: opts.invocationType,
+      model: opts.model,
+      tokensIn: opts.tokensIn,
+      tokensOut: opts.tokensOut,
+      durationMs: opts.durationMs,
+      channel: opts.channel,
+    });
+    return id;
+  };
 }
 
 // Direct invocation (when run as standalone script)
