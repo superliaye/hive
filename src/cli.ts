@@ -1,15 +1,15 @@
 import { Command } from 'commander';
 import { parseOrgTree } from './org/parser.js';
-import { AgentStateStore } from './state/agent-state.js';
 import { SqliteCommsProvider } from './comms/sqlite-provider.js';
 import { ChannelManager } from './comms/channel-manager.js';
 import { MessageGateway } from './comms/message-gateway.js';
-import { AuditStore } from './audit/store.js';
 import { chatAction, observeAction, formatMessage, startFollowing } from './comms/cli-commands.js';
+import { HiveContext } from './context.js';
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs';
 
+// Lightweight helpers for commands that don't need full HiveContext
 function getOrgDir(): string {
   const orgDir = path.resolve(process.cwd(), 'org');
   if (!fs.existsSync(orgDir)) {
@@ -27,14 +27,6 @@ function getDataDir(): string {
   return dataDir;
 }
 
-function getCommsProvider(): SqliteCommsProvider {
-  return new SqliteCommsProvider(path.join(getDataDir(), 'comms.db'));
-}
-
-function getAuditStore(): AuditStore {
-  return new AuditStore(path.join(getDataDir(), 'audit.db'));
-}
-
 const program = new Command();
 
 program
@@ -46,43 +38,48 @@ program
   .command('org')
   .description('Print org chart from folder tree')
   .action(async () => {
-    const org = await parseOrgTree(getOrgDir());
-    function printAgent(id: string, indent: number): void {
-      const agent = org.agents.get(id);
-      if (!agent) return;
-      const prefix = '  '.repeat(indent);
-      const emoji = agent.identity.emoji ?? '🔹';
-      console.log(`${prefix}${emoji} ${chalk.bold(agent.identity.name)} (${agent.identity.role}) [${agent.id}]`);
-      for (const childId of agent.childIds) {
-        printAgent(childId, indent + 1);
+    const ctx = await HiveContext.create();
+    try {
+      const { orgChart } = ctx;
+      function printAgent(id: string, indent: number): void {
+        const agent = orgChart.agents.get(id);
+        if (!agent) return;
+        const prefix = '  '.repeat(indent);
+        const emoji = agent.identity.emoji ?? '🔹';
+        console.log(`${prefix}${emoji} ${chalk.bold(agent.identity.name)} (${agent.identity.role}) [${agent.id}]`);
+        for (const childId of agent.childIds) {
+          printAgent(childId, indent + 1);
+        }
       }
+      console.log(chalk.underline('\nOrg Chart:\n'));
+      printAgent(orgChart.root.id, 0);
+      console.log(`\n${chalk.dim(`${orgChart.agents.size} agents, ${orgChart.channels.length} channels`)}\n`);
+    } finally {
+      ctx.close();
     }
-    console.log(chalk.underline('\nOrg Chart:\n'));
-    printAgent(org.root.id, 0);
-    console.log(`\n${chalk.dim(`${org.agents.size} agents, ${org.channels.length} channels`)}\n`);
   });
 
 program
   .command('status')
   .description('Show active agents and org status')
   .action(async () => {
-    const org = await parseOrgTree(getOrgDir());
-    const stateStore = new AgentStateStore(path.join(getDataDir(), 'orchestrator.db'));
-
-    for (const [id, agent] of org.agents) {
-      stateStore.register(id);
+    const ctx = await HiveContext.create();
+    try {
+      for (const [id] of ctx.orgChart.agents) {
+        ctx.state.register(id);
+      }
+      const states = ctx.state.listAll();
+      console.log(chalk.underline('\nAgent Status:\n'));
+      for (const state of states) {
+        const agent = ctx.orgChart.agents.get(state.agentId);
+        const name = agent?.identity.name ?? state.agentId;
+        const statusColor = state.status === 'working' ? chalk.green : state.status === 'errored' ? chalk.red : chalk.dim;
+        console.log(`  ${statusColor(state.status.padEnd(8))} ${name}`);
+      }
+      console.log();
+    } finally {
+      ctx.close();
     }
-
-    const states = stateStore.listAll();
-    console.log(chalk.underline('\nAgent Status:\n'));
-    for (const state of states) {
-      const agent = org.agents.get(state.agentId);
-      const name = agent?.identity.name ?? state.agentId;
-      const statusColor = state.status === 'working' ? chalk.green : state.status === 'errored' ? chalk.red : chalk.dim;
-      console.log(`  ${statusColor(state.status.padEnd(8))} ${name}`);
-    }
-    console.log();
-    stateStore.close();
   });
 
 program
@@ -194,22 +191,13 @@ program
   .description('Send a message to the CEO via #board')
   .argument('<message>', 'Message to send to the CEO')
   .action(async (message: string) => {
-    const provider = getCommsProvider();
-    const auditStore = getAuditStore();
-    const gateway = new MessageGateway(provider, auditStore);
-    const orgDir = getOrgDir();
+    const ctx = await HiveContext.create();
+    const gateway = new MessageGateway(ctx.comms, ctx.audit);
 
-    // Ensure #board channel exists
-    const channelManager = new ChannelManager(provider);
-    const org = await parseOrgTree(orgDir);
-    await channelManager.syncFromOrgTree(org);
-
-    // Find CEO directory
-    const ceoConfig = org.root;
+    const ceoConfig = ctx.orgChart.root;
     if (!ceoConfig) {
       console.error(chalk.red('No CEO found in org tree.'));
-      provider.close();
-      auditStore.close();
+      ctx.close();
       process.exit(1);
     }
 
@@ -220,7 +208,7 @@ program
       const result = await chatAction({
         message,
         gateway,
-        provider,
+        provider: ctx.comms,
         ceoDir: ceoConfig.dir,
       });
 
@@ -232,8 +220,7 @@ program
     } catch (err: any) {
       console.error(chalk.red(`Error: ${err.message}`));
     } finally {
-      provider.close();
-      auditStore.close();
+      ctx.close();
     }
   });
 
@@ -244,15 +231,13 @@ program
   .option('-n, --limit <number>', 'Number of recent messages to show', '20')
   .option('-f, --follow', 'Follow new messages in real-time', false)
   .action(async (channel: string, opts: { limit: string; follow: boolean }) => {
-    const provider = getCommsProvider();
-    const auditStore = getAuditStore();
-    const gateway = new MessageGateway(provider, auditStore);
+    const ctx = await HiveContext.create();
+    const gateway = new MessageGateway(ctx.comms, ctx.audit);
     const limit = parseInt(opts.limit, 10);
 
     console.log(chalk.underline(`\n#${channel}\n`));
 
     try {
-      // Show existing messages
       const result = await observeAction({
         channel,
         gateway,
@@ -266,7 +251,6 @@ program
         console.log(chalk.dim('(no messages)'));
       }
 
-      // Follow mode: poll for new messages
       if (opts.follow) {
         console.log(chalk.dim('\n--- following (Ctrl+C to stop) ---\n'));
 
@@ -277,24 +261,20 @@ program
           1000,
         );
 
-        // Handle Ctrl+C gracefully
         process.on('SIGINT', () => {
           controller.abort();
           console.log(chalk.dim('\nStopped observing.'));
-          provider.close();
-          auditStore.close();
+          ctx.close();
           process.exit(0);
         });
 
-        // Keep the process alive
         await new Promise(() => {});
       }
     } catch (err: any) {
       console.error(chalk.red(`Error: ${err.message}`));
     } finally {
       if (!opts.follow) {
-        provider.close();
-        auditStore.close();
+        ctx.close();
       }
     }
   });
