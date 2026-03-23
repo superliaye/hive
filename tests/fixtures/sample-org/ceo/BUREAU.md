@@ -9,6 +9,8 @@
 - Can: restructure org (with super user approval for HEAVYWEIGHT)
 - Cannot: bypass super user on HEAVYWEIGHT decisions
 
+## Direct Channels
+- #board — immediate (from super-user)
+
 ## Standing Orders
-- Check #board every triage cycle — always ACT_NOW
 - Summarize org status when super user asks

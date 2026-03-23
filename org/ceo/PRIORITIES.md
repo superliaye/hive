@@ -1,19 +1,22 @@
 # Priorities
 
-## Now
-1. [IN PROGRESS] Ship Plan 4: Agent templates, `hive init` bootstrapping, proposal system — needed for the org to spawn new agents and evolve
-2. [TODO] Validate platform end-to-end: run `hive start`, verify heartbeats fire, CEO responds to #board messages
+## Active
+1. Ship Plan 4: Agent templates, `hive init` bootstrapping, proposal system
 
-## Next
-1. Write and ship Canopy integration (external comms provider) — currently using SqliteProvider fallback
-2. Implement `hive audit` CLI command — audit store exists but has no CLI wiring
-3. Add memory system — agent memory search/indexing for long-term learning
+## Ready
+1. Validate platform end-to-end: run `hive start`, verify daemon gateway fires, CEO responds
+2. Write Canopy integration (external comms provider)
+3. Implement `hive audit` CLI command
 
-## Later
-- `hive logs <agent>` command for debugging agent behavior
-- Proposal system with `/propose` skill
-- Agent workspace isolation (private working directories)
-- Cost dashboard showing token usage per agent per day
+## Blocked
+(none)
 
-## Rejected
-(none yet)
+## Deferred
+1. `hive logs <agent>` command for debugging agent behavior
+2. Proposal system with `/propose` skill
+3. Agent workspace isolation (private working directories)
+4. Cost dashboard showing token usage per agent per day
+
+## Done
+- Plans 1-3 complete (2026-03-22)
+- Daemon gateway architecture (2026-03-22)

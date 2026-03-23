@@ -1,5 +1,14 @@
 # Priorities
 
-## Current
-1. [TODO] Review Plan 4 implementations as they arrive from @platform-eng
-2. [TODO] Validate existing 139 tests still pass after any changes
+## Active
+(none)
+
+## Ready
+1. Review Plan 4 implementations as they arrive from @platform-eng
+2. Validate existing tests still pass after any changes
+
+## Blocked
+(none)
+
+## Done
+(none yet)
