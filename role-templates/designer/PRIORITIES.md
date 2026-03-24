@@ -2,7 +2,6 @@
 
 ### ACTIVE
 - Establish context: 1:1 with manager to understand product design direction and existing patterns
-- Establish context: 1:1 with direct reports (if any) to understand their work
 
 ### READY
 - Audit current UI for design consistency

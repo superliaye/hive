@@ -2,7 +2,6 @@
 
 ### ACTIVE
 - Establish context: 1:1 with manager to understand product scope, known issues, and review expectations
-- Establish context: 1:1 with direct reports (if any) to understand their work
 
 ### READY
 - Perform initial product review

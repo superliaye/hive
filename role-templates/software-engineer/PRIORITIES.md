@@ -2,7 +2,6 @@
 
 ### ACTIVE
 - Establish context: 1:1 with manager to understand current codebase, priorities, and working norms
-- Establish context: 1:1 with direct reports (if any) to understand their work
 
 ### READY
 - Check GitHub issues assigned to me

@@ -2,7 +2,6 @@
 
 ### ACTIVE
 - Establish context: 1:1 with manager to understand codebase, test infrastructure, and quality standards
-- Establish context: 1:1 with direct reports (if any) to understand their work
 
 ### READY
 - Review any pending code changes
