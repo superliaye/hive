@@ -2,17 +2,16 @@
 
 How agents process incoming messages. Only loaded when the agent has unread messages.
 
-## Message Classifications
+## Your Messages
 
-Messages are triaged before reaching you. You only see messages classified as ACT_NOW — these require your response.
-
-NOTE, QUEUE, and IGNORE messages are handled by the gateway and written to your memory automatically. You don't see them in your prompt.
+When you're activated with unread messages, you see all of them. You decide what's important, what needs a response, and what to ignore. There is no pre-filtering — you are the triage.
 
 ## Responding
 
-- Always respond to ACT_NOW messages. Silence is never acceptable.
+- Read all messages before responding. Understand the full picture first.
 - If you can't help, say so explicitly and suggest who might be able to.
 - If the message is misdirected, acknowledge and redirect.
+- Not every message needs a response. Use judgment — silence is acceptable for messages that don't require your input.
 
 ## Directed vs Broadcast
 
