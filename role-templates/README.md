@@ -18,17 +18,28 @@ If in doubt, make the change in the org-specific agent files, not here.
 
 ## Structure
 
-Each role template defines the starting configuration for a new agent:
-- **Identity** — model, tools, skills, emoji
-- **Soul** — core traits, perspective, personality
-- **Bureau Template** — authority levels, reporting relationships (parameterized)
-- **Routine** — what the agent does on each cycle
-- **Priorities Template** — starting priorities (includes onboarding as first task)
-- **Elastic Responsibilities** — what this role absorbs when no specialist exists
-- **Focus Rules** — when applicable, constraints on attention
+Each role is a folder containing the files that get copied into a new agent's directory on instantiation:
 
-## Model Selection Rationale
+```
+role-templates/
+├── chief-executive/
+│   ├── IDENTITY.md
+│   ├── SOUL.md
+│   ├── BUREAU.md
+│   ├── PRIORITIES.md
+│   ├── MEMORY.md
+│   └── EVENTS.md
+├── agent-resources/
+│   └── ...
+└── software-engineer/
+    └── ...
+```
 
-- **Opus** — judgment-heavy roles: CEO, department heads, PM, PA, designer
-- **Sonnet** — execution-heavy roles: software engineers, QA engineers
-- AR uses opus because provisioning errors are costly and hard to reverse
+### Files
+
+- **IDENTITY.md** — model, tools, skills, emoji. The agent's capabilities.
+- **SOUL.md** — core traits, perspective, personality. How the agent thinks.
+- **BUREAU.md** — authority levels, reporting relationships. Parameterized on instantiation.
+- **PRIORITIES.md** — starting priorities. Default first priority: 1:1 with manager and all direct reports to establish context.
+- **MEMORY.md** — starts empty. Exists so the agent has a place to accumulate knowledge from day one.
+- **EVENTS.md** — unprocessed events (org changes, scheduled jobs, webhook triggers). Does not include communications. Programmatically appended by the framework.
