@@ -137,11 +137,12 @@ Key properties:
 
 ## Role Templates
 
-Each role template defines the starting files for a new agent.
-Templates live in `roles/` directory.
-AR uses these when instantiating new agents.
+Role templates live at the repository root: `/role-templates/`.
+They are shared across all org templates. The bar for changing them is extremely high.
 
-See individual role files in this directory.
+This org template uses: chief-executive, agent-resources, department-head, software-engineer, qa-engineer, product-manager, product-analyst, designer.
+
+See `/role-templates/README.md` for the change policy.
 
 ## Events System
 
