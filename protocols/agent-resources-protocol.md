@@ -2,12 +2,22 @@
 
 The shared vocabulary for scaling the organization.
 
-## Scaling Signals
+## Measuring Backlog
 
-Two signals indicate an agent or team needs scaling:
+Backlog = work waiting to be done. Signals:
 
-- **Backlog** — work accumulating faster than it's completed (READY queue growing, BLOCKED items stalling, message pickup latency increasing)
-- **Focus** — agent juggling too many unrelated domains, degrading quality (domain spread in ACTIVE priorities, context switching, memory pollution)
+- **READY queue depth** — how many READY priorities are piling up?
+- **BLOCKED duration** — how long have items been BLOCKED?
+- **Message pickup latency** — how many cycles do messages sit as QUEUE/NOTE before being acted on?
+- **DONE throughput** — are items moving to DONE or stalling?
+
+## Measuring Focus
+
+Focus = how many unrelated domains an agent is juggling. Signals:
+
+- **Domain spread** — how many distinct `domain` values in your ACTIVE priorities?
+- **Context switching** — are you bouncing between unrelated tasks every cycle?
+- **Memory pollution** — is your memory filling with context from too many areas?
 
 ## Scaling Request Format
 
