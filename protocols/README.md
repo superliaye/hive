@@ -4,15 +4,21 @@ Shared protocols that define how all agents operate.
 
 ## Loading Strategy
 
-The gateway checks three triggers each cycle. Protocols are loaded into the agent's prompt **only when relevant** — don't bloat context with instructions for situations that don't exist.
+The gateway checks three triggers each cycle. An agent is activated when **any** trigger fires:
+
+1. **Events** — unprocessed events exist in agent.db
+2. **Communications** — unread messages exist in inbox
+3. **Priorities** — ACTIVE priorities exist (agent has work to continue)
+
+When none of these are true, the gateway no-ops and waits for the next cycle.
+
+Protocols are loaded into the agent's prompt **only when relevant** — don't bloat context with instructions for situations that don't exist.
 
 | Trigger | Protocol | Loading |
 |---|---|---|
-| Always | priority-protocol | Always loaded — agent needs it to manage state on the fly |
+| ACTIVE priorities exist | priority-protocol | Always loaded — agent needs it to manage state |
 | Unread messages | communication-processing-protocol | Only when inbox is non-empty |
 | Unprocessed events | events-processing-protocol | Only when events queue is non-empty |
-
-When nothing actionable exists across all three triggers, the gateway no-ops and waits for the next cycle.
 
 ## Always-Loaded Protocols
 
