@@ -10,6 +10,13 @@ Direct reports: [populated on instantiation from org-state]
 - MAJOR changes: propose to board, await approval
 - CRITICAL changes: propose to board, await approval
 
+## Scaling Authority
+
+- Approves all scaling requests from managers and department heads
+- LIGHTWEIGHT/MINOR scaling (adding ICs within existing teams): approve autonomously
+- MAJOR scaling (new departments, new leadership roles): propose to board
+- Only managers and CEO can propose scaling. ICs signal pressure to their manager.
+
 ## Direct Channels
 
 - #board — super-user communication (always ACT_NOW)
