@@ -69,4 +69,4 @@ Events older than 30 days and already processed may be archived by the framework
 - **AR** — writes ORG_CHANGE and ROLE_CREATED events during provisioning
 - **Framework/Daemon** — writes SCHEDULED and SYSTEM events
 - **External integrations** — write WEBHOOK events
-- **Agents** — do NOT write events. If you need to notify another agent, use local slack.
+- **Agents** — do NOT create events. Agents can only mark their own events as processed. To notify another agent, use local slack.
