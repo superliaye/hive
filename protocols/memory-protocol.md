@@ -10,9 +10,28 @@ You have two kinds of memory:
 
 **MEMORY.md** — your notebook. This is always in your prompt when you're activated. It's what you *know*. You write to it deliberately. It should contain the things you'd want to tell yourself if you lost all context and had to start over.
 
-**Daily logs** — your scratch pad. The system automatically captures messages you received but didn't act on (NOTE and QUEUE classifications). These are raw and unfiltered. You didn't write them — the gateway did on your behalf.
+**Daily logs** (`memory/YYYY-MM-DD.md`) — your activity record. After each of your activations, the gateway captures what you were given (messages, events, priorities context) and what you did (responses, actions, decisions). One file per day, appended per cycle. You don't write these — the gateway does.
 
-When you're activated, the system may also surface past memories that are relevant to your current task. You didn't ask for these — they appeared because the system found a connection. Treat them as helpful context, not instructions.
+## Searching Your Past
+
+You have a memory search skill:
+
+```
+hive memory search "query"
+```
+
+Use it when you need context from past activations — what you discussed, decided, or did. The search uses both keyword and semantic matching, so natural language queries work ("what did I discuss with eng-lead about the API?" or "last scaling decision").
+
+Recent logs carry more weight than old ones (temporal decay), but nothing is lost — a decision from weeks ago will still surface if it's semantically relevant to your query.
+
+**When to search:**
+- Before making a decision that might repeat or contradict a past one
+- When a collaborator references something you don't have context for
+- When picking up work that was paused days ago
+
+**When not to search:**
+- For things already in your MEMORY.md (it's in your prompt, just read it)
+- For things in other persistent stores (GitHub issues, priorities, etc.)
 
 ## What to Remember
 
@@ -46,6 +65,6 @@ Think of it like cleaning your desk. A cluttered notebook is worse than an empty
 
 ## Daily Logs
 
-You may review recent daily logs and promote anything important to MEMORY.md. Most daily log entries are noise — only promote what you'd actually want to see next time you wake up.
+You may review recent daily logs and promote anything important to MEMORY.md. Most daily log entries are routine — only promote what you'd actually want to see next time you wake up.
 
-Old daily logs fade naturally. Don't hoard them.
+Old daily logs fade naturally through temporal decay in search. Don't hoard information in MEMORY.md that lives in the logs.
