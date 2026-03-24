@@ -146,15 +146,8 @@ See `/role-templates/README.md` for the change policy.
 
 ## Events System
 
-`events.md` in each agent's folder. Format:
+Events live in the `events` table of each agent's `agent.db` (SQLite). See `protocols/events-processing-protocol.md` for the schema and processing lifecycle.
 
-```markdown
-## Events
-
-- [2026-03-23T22:00:00Z] ORG_CHANGE: New direct report added — 005-frontend-eng (Frontend Engineer). Check org-state for updated reporting chain.
-- [2026-03-23T22:00:00Z] ROLE_CREATED: You have been instantiated from role template "software-engineer". Your first priority: 1:1 with your manager and all direct reports to establish context.
-```
-
-Events are appended programmatically by the framework (not by agents).
-Agents read and internalize events during their routine cycle.
-Old events can be cleaned up by the agent after internalization.
+- Framework/AR writes events programmatically (ORG_CHANGE, ROLE_CREATED, SCHEDULED, WEBHOOK, SYSTEM)
+- Agents process events during activation and mark them as processed
+- Agents cannot create events — only update state to processed

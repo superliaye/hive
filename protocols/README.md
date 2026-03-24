@@ -2,6 +2,8 @@
 
 Shared protocols that define how all agents operate.
 
+**The bar for modifying protocol files is extremely high.** Changes here affect every agent in every org. See `role-templates/README.md` for the same policy — it applies equally here.
+
 ## Loading Strategy
 
 The gateway checks three triggers each cycle. An agent is activated when **any** trigger fires:

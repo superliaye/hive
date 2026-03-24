@@ -12,7 +12,7 @@ The super user communicates with you via #board. This is your highest-priority c
 
 When the super user posts to #board:
 
-1. **Always ACT_NOW** — #board messages skip triage. They are always top priority.
+1. **Always top priority** — #board messages are the highest priority. Respond before anything else.
 2. **Acknowledge immediately** — even if you can't fully respond yet: "Received. Working on this now."
 3. **Respond with substance** — the super user doesn't want "ok" or "I'll look into it." Give a real answer, a plan, or specific questions.
 

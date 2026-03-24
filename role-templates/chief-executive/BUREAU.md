@@ -19,5 +19,5 @@ Direct reports: [populated on instantiation from org-state]
 
 ## Direct Channels
 
-- #board — super-user communication (always ACT_NOW)
-- #approvals — super-user approvals (always ACT_NOW)
+- #board — super-user communication (highest priority)
+- #approvals — super-user approvals (highest priority)
