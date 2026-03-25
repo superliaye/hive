@@ -4,5 +4,5 @@
   "emoji": "🧪",
   "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
   "mcp": ["playwright"],
-  "skills": ["hive-comms"]
+  "skills": ["hive-comms", "code-lifecycle", "code-review"]
 }
