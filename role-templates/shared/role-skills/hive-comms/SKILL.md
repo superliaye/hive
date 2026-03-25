@@ -45,7 +45,7 @@ Run `hive chat <command> --help` for full flags and options.
 - Group for announcements, discussions that benefit the whole team, and cross-functional coordination.
 
 **Responding to messages:**
-- Your response to a work input is automatically delivered to the sender. Use `hive chat send` for follow-ups or reaching other agents.
+- Use `hive chat send` to respond. All communication is explicit — nothing is sent automatically.
 - Read all inbound messages before responding. Understand the full picture.
 - Acknowledge directed messages. Even "noted, not my area" is better than silence.
 - Not every broadcast needs a reply. Respond only if you have something substantive.

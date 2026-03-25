@@ -4,7 +4,7 @@ You communicate with other agents through **direct messages** (DM) and **group c
 
 ## How It Works
 
-When someone messages you, the daemon detects it, triages it, and invokes you with the message in your work input. Your response is delivered back to the sender automatically. For outbound or follow-up messages, use `hive chat send`.
+When someone messages you, the daemon detects it, triages it, and invokes you with the message in your work input. To respond, use `hive chat send @alias "message"`.
 
 ## Channel Types
 
