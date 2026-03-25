@@ -31,21 +31,33 @@ export interface SkillResolution {
   role: string[];      // Paths to role-specific skill dirs
 }
 
+/**
+ * Resolve skills for an agent from role-templates.
+ *
+ * @param role - Agent's role (used to find role-specific skills)
+ * @param roleTemplatesRoot - Path to role-templates/ directory
+ * @param declaredSkills - Explicit skill names from IDENTITY.md frontmatter
+ *
+ * Directory layout:
+ *   role-templates/shared/role-skills/<skill-name>/SKILL.md
+ *   role-templates/<role>/role-skills/<skill-name>/SKILL.md
+ */
 export function resolveSkillsForAgent(
   role: string,
-  skillsRoot: string,
+  roleTemplatesRoot: string,
   declaredSkills?: string[],
 ): SkillResolution {
+  const sharedSkillsDir = path.join(roleTemplatesRoot, 'shared', 'role-skills');
+  const roleDir = matchRoleDir(role);
+  const roleSkillsDir = path.join(roleTemplatesRoot, roleDir, 'role-skills');
+
   // Explicit skills take precedence over role-based mapping
   if (declaredSkills && declaredSkills.length > 0) {
     const skillPaths: string[] = [];
-    const dirs = fs.existsSync(skillsRoot)
-      ? fs.readdirSync(skillsRoot, { withFileTypes: true }).filter(e => e.isDirectory())
-      : [];
     for (const skillName of declaredSkills) {
       const candidates = [
-        path.join(skillsRoot, 'shared', skillName),
-        ...dirs.filter(d => d.name !== 'shared').map(d => path.join(skillsRoot, d.name, skillName)),
+        path.join(sharedSkillsDir, skillName),
+        path.join(roleSkillsDir, skillName),
       ];
       for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {
@@ -57,28 +69,25 @@ export function resolveSkillsForAgent(
     return { roleDir: 'explicit', shared: [], role: skillPaths };
   }
 
-  const roleDir = matchRoleDir(role);
   const shared: string[] = [];
   const rolePaths: string[] = [];
 
   // Shared skills
-  const sharedDir = path.join(skillsRoot, 'shared');
-  if (fs.existsSync(sharedDir)) {
-    const entries = fs.readdirSync(sharedDir, { withFileTypes: true });
+  if (fs.existsSync(sharedSkillsDir)) {
+    const entries = fs.readdirSync(sharedSkillsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        shared.push(path.join(sharedDir, entry.name));
+        shared.push(path.join(sharedSkillsDir, entry.name));
       }
     }
   }
 
   // Role-specific skills
-  const roleSkillDir = path.join(skillsRoot, roleDir);
-  if (fs.existsSync(roleSkillDir)) {
-    const entries = fs.readdirSync(roleSkillDir, { withFileTypes: true });
+  if (fs.existsSync(roleSkillsDir)) {
+    const entries = fs.readdirSync(roleSkillsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        rolePaths.push(path.join(roleSkillDir, entry.name));
+        rolePaths.push(path.join(roleSkillsDir, entry.name));
       }
     }
   }
