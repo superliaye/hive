@@ -163,12 +163,23 @@ hive chat history @alias --from 10 --to 30   # Seq 10-30 (inclusive both ends)
 hive chat history @alias --from 10 --limit 5 # 5 messages starting at seq 10
 hive chat history @alias --all               # Everything
 
-# Search (cross-channel, with filters)
-hive chat search "query"                     # FTS across all channels I'm a member of
-hive chat search --from @alias               # All messages FROM alias in my channels
-hive chat search --from @alias "query"       # From alias matching query
-hive chat search --in #group "query"         # Within specific group
-hive chat search --from @alias --in #group   # Combined filters
+# Search (grep-aligned, cross-channel)
+hive chat search "pattern"                       # All my channels (literal match)
+hive chat search @alias "pattern"                # Within DM with alias
+hive chat search #group "pattern"                # Within group
+hive chat search --from @alias "pattern"         # From person, all my channels
+hive chat search --from @alias @bob "pattern"    # From person, within DM with bob
+hive chat search --from @alias #group "pattern"  # From person, within group
+hive chat search --after 2026-03-20 "pattern"    # Time-bounded
+hive chat search --before 2026-03-23 "pattern"   # Time-bounded
+hive chat search -i "pattern"                    # Case insensitive
+hive chat search -E "deploy.*fail"               # Extended regex (default: literal)
+hive chat search "pattern" --limit 20            # Max results (default 20)
+hive chat search "pattern" --limit 20 --offset 40  # Pagination
+# Filters composable: --from, scope (@/\#), --after, --before, -i, -E
+# At least one of: scope, --from, or "pattern" required
+# Output: channel | sender | seq | timestamp | message (newest first)
+# Header: "Found 47 results (showing 1-20)"
 
 # Group management
 hive chat group create "name" @a @b @c       # Create group (creator auto-joins, min 2 total)
