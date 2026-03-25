@@ -1,0 +1,9 @@
+{
+  "name": "Designer",
+  "role": "UI/UX Designer",
+  "model": "claude-opus-4-6",
+  "emoji": "🎨",
+  "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+  "mcp": ["playwright"],
+  "skills": []
+}

@@ -18,26 +18,39 @@ If in doubt, make the change in the org-specific agent files, not here.
 
 ## Structure
 
-Each role is a folder containing the files that get copied into a new agent's directory on instantiation:
+Each role is a folder containing a gateway config and the prompt files that get copied into a new agent's directory on instantiation:
 
 ```
 role-templates/
 ├── chief-executive/
-│   ├── IDENTITY.md
+│   ├── config.json     ← gateway reads (never in prompt)
+│   ├── IDENTITY.md     ← agent reads (loaded into prompt)
 │   ├── SOUL.md
 │   ├── BUREAU.md
 │   ├── PRIORITIES.md
 │   ├── MEMORY.md
-│   └── EVENTS.md
+│   ├── EVENTS.md
+│   └── skills/         ← role-specific skills (optional)
 ├── agent-resources/
 │   └── ...
 └── software-engineer/
     └── ...
 ```
 
-### Files
+### config.json (gateway config — declarative, never in prompt)
 
-- **IDENTITY.md** — model, tools, skills, emoji. The agent's capabilities.
+Controls how the gateway spawns the agent:
+
+- **name** — display name
+- **model** — which Claude model to use
+- **emoji** — visual identifier
+- **tools** — Claude Code tools available (Read, Write, Edit, Bash, etc.)
+- **mcp** — MCP servers to enable (e.g. "playwright"). Resolved via `--strict-mcp-config --mcp-config`
+- **skills** — skills to load into prompt. Resolved from `role-templates/<role>/skills/` or root `skills/`
+
+### Prompt Files (loaded into agent's system prompt)
+
+- **IDENTITY.md** — who you are, what you do, what you don't do. Brief role description.
 - **SOUL.md** — core traits, perspective, personality. How the agent thinks.
 - **BUREAU.md** — authority levels, reporting relationships. Parameterized on instantiation.
 - **PRIORITIES.md** — starting priorities. Default first priority: 1:1 with manager and all direct reports to establish context.

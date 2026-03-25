@@ -1,0 +1,10 @@
+{
+  "name": "[Department] Lead",
+  "role": "Vice President of [Department]",
+  "model": "claude-opus-4-6",
+  "emoji": "📋",
+  "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+  "mcp": [],
+  "skills": [],
+  "_note": "name, role, and emoji are customized on instantiation based on department"
+}
