@@ -44,13 +44,17 @@ export function buildChatCommand(db: ChatDb): Command {
       }
 
       const callerId = getCallerId();
-      const channelId = channelStore.resolveTarget(target, callerId);
 
+      // Validate before resolving (resolveTarget lazily creates DMs)
       if (target.startsWith('@')) {
         const alias = target.slice(1);
         const person = access.resolvePerson(alias);
         access.validateSend(callerId, person.id);
-      } else {
+      }
+
+      const channelId = channelStore.resolveTarget(target, callerId);
+
+      if (target.startsWith('#')) {
         access.requireMembership(callerId, channelId);
       }
 
@@ -85,7 +89,7 @@ export function buildChatCommand(db: ChatDb): Command {
     .description('Advance read cursor. @alias for DM, #group for group.')
     .action((target: string, seqStr: string) => {
       const callerId = getCallerId();
-      const channelId = channelStore.resolveTarget(target, callerId);
+      const channelId = channelStore.resolveExistingTarget(target, callerId);
       cursorStore.ack(callerId, channelId, Number(seqStr));
       process.stdout.write(`Cursor advanced to seq ${seqStr} on ${channelId}\n`);
     });
@@ -100,7 +104,7 @@ export function buildChatCommand(db: ChatDb): Command {
     .option('--all', 'Show all messages')
     .action((target: string, opts: any) => {
       const callerId = getCallerId();
-      const channelId = channelStore.resolveTarget(target, callerId);
+      const channelId = channelStore.resolveExistingTarget(target, callerId);
       access.requireMembership(callerId, channelId);
 
       const result = msgStore.history(channelId, {
@@ -141,7 +145,7 @@ export function buildChatCommand(db: ChatDb): Command {
         actualPattern = scope;
         scopeChannelId = undefined;
       } else if (scope) {
-        scopeChannelId = channelStore.resolveTarget(scope, callerId);
+        scopeChannelId = channelStore.resolveExistingTarget(scope, callerId);
       }
 
       let fromPersonId: number | undefined;

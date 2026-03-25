@@ -155,13 +155,37 @@ export class ChannelStore {
       .run(groupId, 'group');
   }
 
-  /** Resolve @alias or #group target string to channel id. Creates DM lazily if needed. */
+  /** Resolve @alias or #group target string to channel id. Creates DM lazily if needed (use for send). */
   resolveTarget(target: string, callerId: number): string {
     if (target.startsWith('@')) {
       const alias = target.slice(1);
       const person = this.access.resolvePerson(alias);
       const dm = this.ensureDm(callerId, person.id);
       return dm.id;
+    }
+    if (target.startsWith('#')) {
+      const groupName = target.slice(1);
+      const ch = this.getChannel(groupName);
+      if (!ch || ch.type !== 'group' || ch.deleted) {
+        throw new Error(`Group "${groupName}" not found. Run: hive chat group list`);
+      }
+      return ch.id;
+    }
+    throw new Error(`Target must start with @ (DM) or # (group). Got: "${target}"`);
+  }
+
+  /** Resolve target without creating DM (use for history, search, ack). Throws if DM doesn't exist. */
+  resolveExistingTarget(target: string, callerId: number): string {
+    if (target.startsWith('@')) {
+      const alias = target.slice(1);
+      const person = this.access.resolvePerson(alias);
+      const [lo, hi] = callerId < person.id ? [callerId, person.id] : [person.id, callerId];
+      const id = `dm:${lo}:${hi}`;
+      const existing = this.db.raw().prepare('SELECT id FROM channels WHERE id = ?').get(id);
+      if (!existing) {
+        throw new Error(`No DM history with @${alias}`);
+      }
+      return id;
     }
     if (target.startsWith('#')) {
       const groupName = target.slice(1);
