@@ -131,57 +131,95 @@ Chat is a module inside hive (`src/chat/`). It owns channel and message storage 
 | Type | Creation | Members | Example |
 |------|----------|---------|---------|
 | **DM** | Lazy (first message creates it) | Exactly 2 people | dm between CEO and AR |
-| **Group** | Explicit (`hive chat group create`) | N people | eng-team, cross-func sprint |
+| **Group** | Explicit (`hive chat group create`) | N people (min 2) | eng-team, cross-func sprint |
 
-No special named channels (`#board`, `#approvals`, `#team-*`). Team channels are just groups created on demand. Any agent can create, delete, and manage groups they belong to.
+No special named channels (`#board`, `#approvals`, `#team-*`). Team channels are just groups created on demand. Any member can manage groups they belong to. Group names: kebab-case `[a-z0-9-]`, max 50 chars, globally unique.
 
 ### CLI Commands
 
-Identity is injected via `HIVE_AGENT_ID` env var. No `--as` flag.
+Identity is injected via `HIVE_AGENT_ID` env var. No `--as` flag. Super-user uses `HIVE_AGENT_ID=0`. Dashboard calls CLI under the hood.
+
+All commands are agent-first: missing/invalid args return helpful error messages with usage hints. `hive chat --help` shows full command tree. `hive chat` with no subcommand shows help.
 
 ```
-hive chat send @alias "message"          # DM (channel created lazily)
-hive chat send #group "message"          # Message to group
+# Messaging
+hive chat send @alias "message"              # DM (channel created lazily)
+hive chat send #group "message"              # Message to group
+                                             # Supports multiline strings, stdin pipe
+                                             # Returns: "Sent seq <N> to <channel>"
 
-hive chat inbox                          # Unread messages (rarely used — gateway handles)
-hive chat ack @alias <seq>               # Advance read cursor (rarely used)
+# Inbox (rarely used — gateway handles inbound automatically)
+hive chat inbox                              # All unread, grouped by channel, chronological
+hive chat ack @alias <seq>                   # Advance DM read cursor
+hive chat ack #group <seq>                   # Advance group read cursor
 
-hive chat history @alias [--limit N]     # DM history (default 20, shows "N of M total")
-hive chat history #group [--limit N]     # Group history
-hive chat history @alias --range 10:30   # Messages seq 10-30
-hive chat history @alias --all           # Full history
-hive chat search "query"                 # Search across all channels
+# History (channel-scoped thread view)
+hive chat history @alias                     # Last 20 (default), shows "N of M total"
+hive chat history #group                     # Group history
+hive chat history @alias --limit 50          # Last 50
+hive chat history @alias --from 10           # Seq 10 → latest
+hive chat history @alias --to 30             # Oldest → seq 30
+hive chat history @alias --from 10 --to 30   # Seq 10-30 (inclusive both ends)
+hive chat history @alias --from 10 --limit 5 # 5 messages starting at seq 10
+hive chat history @alias --all               # Everything
 
-hive chat group create "name" @a @b @c   # Create group
-hive chat group list                     # Groups you belong to
-hive chat group add #name @alias         # Add member
-hive chat group remove #name @alias      # Remove member
-hive chat group delete #name             # Delete group
+# Search (cross-channel, with filters)
+hive chat search "query"                     # FTS across all channels I'm a member of
+hive chat search --from @alias               # All messages FROM alias in my channels
+hive chat search --from @alias "query"       # From alias matching query
+hive chat search --in #group "query"         # Within specific group
+hive chat search --from @alias --in #group   # Combined filters
+
+# Group management
+hive chat group create "name" @a @b @c       # Create group (creator auto-joins, min 2 total)
+hive chat group list                         # Groups you belong to
+hive chat group info #name                   # Members, created_by, message count
+hive chat group add #name @alias             # Add member
+hive chat group remove #name @alias          # Remove member (including self = leave)
+hive chat group delete #name                 # Delete group (any member, messages preserved)
 ```
+
+### Validation Rules
+
+- `send` to self → error: `Cannot send message to yourself`
+- `send @unknown` → error: `Person "unknown" not found. Run: hive chat group list`
+- `send #unknown` → error: `Group "unknown" not found. Run: hive chat group list`
+- `--from` > `--to` → error: `--from must be <= --to`
+- Missing `HIVE_AGENT_ID` → error: `HIVE_AGENT_ID not set. Are you running inside a hive agent?`
+- `group create` with < 2 members → error: `Group must have at least 2 members`
+- `group create` with invalid alias → error: `Person "x" not found`
+- `group add` super-user → error: `Super-user cannot be added to groups`
+- Non-CEO messaging super-user → error: `Only CEO can message super-user`
 
 ### Message Model
 
 - Per-channel sequential IDs (monotonically increasing)
 - Per-person per-channel read cursors (Kafka-style)
 - Crash-safe: cursor only advances after message is processed
-- History output: `Showing 20 of 47 messages in dm:alice (seq 28-47)`
+- History output header: `Showing 20 of 47 messages in dm:alice (seq 28-47)`
+- All output includes: sender alias, seq ID, timestamp, full message content
+- DM channel ID: `dm:<lower_id>:<higher_id>` (internal, transparent to user)
 
 ### Gateway Integration
 
 The gateway handles inbound messages for agents automatically:
 
 1. Gateway checks for unread messages (read cursors)
-2. Gateway writes `MSG_RECEIVED` events to agent's `agent.db` events table
+2. Gateway writes `MSG_RECEIVED` events to agent's `agent.db` events table (dedup key: message seq ID)
 3. Gateway advances read cursors
 4. Agent sees messages as events during activation, responds via `hive chat send`
 
-Crash safety: events are written to `agent.db` **before** cursors advance. If crash between steps 2 and 3, messages become duplicate events on next cycle — deduped by message seq ID.
+Crash safety: events written to `agent.db` **before** cursors advance. If crash between 2→3, duplicate events on next cycle — deduped by seq ID. Gateway acks after dumping messages to events.
+
+Super-user sends messages via CLI (`HIVE_AGENT_ID=0`) or dashboard (which calls CLI).
 
 ### Access Control
 
 - Only CEO (+ optionally department heads) can message super-user (id=0)
 - Super-user cannot be added to groups
-- Agents can only see channels they are members of
+- Agents can only see/search channels they are members of
+- Any member can add/remove members from groups they belong to
+- Any member can delete a group they belong to (messages preserved for audit)
 
 ### Scale Design
 
