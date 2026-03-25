@@ -13,7 +13,7 @@ An org template for building software products. One human, N agents.
 
 ### 1. Roles are templates, agents are instances
 
-A role defines: model, tools, skills, soul, routine, bureau template.
+A role defines: config.json (model, tools, mcp, skills) + prompt files (identity, soul, bureau, priorities, memory, events).
 An agent is an instantiation of a role with a unique ID, alias, and accumulated memory.
 Scaling means instantiating more agents from a role template — not redesigning them.
 
@@ -58,8 +58,8 @@ No shadow period. Instead:
 
 ### 7. Events, not notifications
 
-Org changes append to each affected agent's `events.md` (programmatic).
-Agents internalize events in their next routine cycle.
+Org changes write to each affected agent's `events` table in `agent.db` (programmatic).
+Agents process events during activation and mark them as processed.
 Events have timestamps and are machine-written.
 Agents decide how to act on events (update BUREAU.md, adjust priorities, etc.).
 
@@ -67,35 +67,35 @@ Agents decide how to act on events (update BUREAU.md, adjust priorities, etc.).
 
 Directed messages use DM channels (`dm:<agent-id>`).
 Team channels are for broadcasts only.
-Comms happen via CLI: `hive post --channel dm:<agent-id> --as <your-id> "message"`.
+Comms happen via CLI: `hive msg @<name> "message"` (agent identity injected via env).
 
 ## Org-State Schema
 
 SQLite database at `org-state/org.db`:
 
 ```sql
-CREATE TABLE employees (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE people (
+  id INTEGER PRIMARY KEY,            -- 0 = super-user, 1+ = agents
   alias TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
-  role_template TEXT NOT NULL,
+  role_template TEXT,                 -- null for super-user
   status TEXT NOT NULL DEFAULT 'active',
-  folder TEXT NOT NULL,
+  folder TEXT,                        -- null for super-user
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE reporting (
-  employee_id INTEGER NOT NULL REFERENCES employees(id),
-  manager_id INTEGER REFERENCES employees(id),
+  person_id INTEGER NOT NULL REFERENCES people(id),
+  manager_id INTEGER REFERENCES people(id),
   effective_from DATETIME DEFAULT CURRENT_TIMESTAMP,
   effective_until DATETIME,
-  PRIMARY KEY (employee_id, effective_from)
+  PRIMARY KEY (person_id, effective_from)
 );
 
 CREATE TABLE resourcing_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   action TEXT NOT NULL,
-  employee_id INTEGER NOT NULL,
+  person_id INTEGER NOT NULL,
   details TEXT NOT NULL,
   initiated_by INTEGER,
   approved_by INTEGER,
@@ -105,8 +105,8 @@ CREATE TABLE resourcing_audit (
 
 Key properties:
 - `reporting` is temporal — full history of every reorg via `effective_from`/`effective_until`
-- `employees.id` is monotonically increasing — never reused
-- `employees.folder` maps to the flat directory name (e.g., `003-platform-eng`)
+- `people.id` is monotonically increasing — never reused
+- `people.folder` maps to the flat directory name (e.g., `003-platform-eng`)
 - Channels are derived from `reporting` table, managed by existing comms system
 
 ## Growth Stages

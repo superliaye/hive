@@ -162,7 +162,7 @@ Shared (org-level):
 ├── comms.db         Channels, messages, read_receipts, channel_members, FTS5 index
 ├── audit.db         Invocation log: tokens, duration, summaries, action_summary
 ├── orchestrator.db  Agent state: status, last_invocation, last_heartbeat, pid
-└── org-state.db     Employees, reporting hierarchy (temporal), resourcing audit
+└── org-state.db     People (super-user + agents), reporting hierarchy (temporal), resourcing audit
 
 Per-agent (in agent folder):
 └── agent.db         Priorities, events, memory index (chunks, FTS5, sqlite-vec)
@@ -198,7 +198,7 @@ Protocols are conditionally loaded based on which triggers fired — don't bloat
 4. **Hot reload**: Daemon rescans org/ directory on each tick for new/removed agents
 5. **Agent autonomy**: No agent modifies another agent's state. All influence through communication.
 6. **Gateway is dumb**: Gateway activates, records, indexes. Agent makes all decisions.
-7. **All agents use `hive post`** for cross-channel communication
+7. **All agents use `hive msg`** for communication (identity injected via `HIVE_AGENT_ID` env var)
 
 ## Dependencies
 

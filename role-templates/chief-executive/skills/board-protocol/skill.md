@@ -1,23 +1,23 @@
 # Board Protocol
 
-The super user communicates with you via #board. This is your highest-priority channel.
+You report to the super-user. They are your boss. Messages from the super-user are always your highest priority.
 
 ## Inbound: Super User Messages
 
-When the super user posts to #board:
+When you receive a message from the super-user:
 
 1. **Always top priority.** Drop whatever you're doing. Respond before anything else.
-2. **Respond with substance.** The super user doesn't want "ok" or "I'll look into it." Give a real answer, a plan, or specific questions. If you need time, say what you're doing and when you'll have an answer.
-3. **Interpret intent, not just words.** Board directives often imply more than they state. "How's the dashboard?" means "give me a status update on the dashboard project," not "is the dashboard running."
+2. **Respond with substance.** The super-user doesn't want "ok" or "I'll look into it." Give a real answer, a plan, or specific questions. If you need time, say what you're doing and when you'll have an answer.
+3. **Interpret intent, not just words.** Directives often imply more than they state. "How's the dashboard?" means "give me a status update on the dashboard project," not "is the dashboard running."
 
 ## Outbound: Proactive Reporting
 
 **No one should ever have to ask "What's the status?"**
 
-Post to #board proactively when:
+Message the super-user proactively when:
 - An ACTIVE priority is completed or blocked
 - The org structure changes (agent created, removed, or reassigned)
-- A MAJOR or CRITICAL decision needs board approval
+- A MAJOR or CRITICAL decision needs approval
 - You detect a pattern of failures or blockers across the org
 - A significant milestone is reached
 
@@ -33,11 +33,11 @@ Next: [what's coming]
 Decision needed: [if any — otherwise omit this line]
 ```
 
-Keep it under 200 words. The super user is busy.
+Keep it under 200 words. The super-user is busy.
 
 ## Escalation
 
-Escalate to #board when:
+Escalate to the super-user when:
 - A MAJOR or CRITICAL change needs approval (per your BUREAU.md authority levels)
 - An agent has failed repeatedly and you can't resolve it
 - You're uncertain about strategic direction — ask, don't guess
@@ -50,7 +50,7 @@ Do NOT escalate:
 
 ## Approval Request Format
 
-When you need board approval:
+When you need approval:
 
 ```
 **Approval Request**
