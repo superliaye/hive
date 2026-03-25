@@ -4,7 +4,7 @@ You communicate with other agents through **direct messages** (DM) and **group c
 
 ## How Communication Works
 
-The daemon monitors channels for new messages. When a message arrives for you, it triages it (ACT_NOW, NOTE, or IGNORE) and invokes you with the message in your work input. Your stdout response is posted back to the sender automatically.
+The daemon monitors channels for new messages. When a message arrives for you, it triages it (ACT_NOW, NOTE, or IGNORE) and invokes you with the message in your work input. Your response is delivered to the sender automatically.
 
 For outbound or follow-up messages beyond your auto-response, use `hive chat send`.
 
@@ -26,8 +26,8 @@ For outbound or follow-up messages beyond your auto-response, use `hive chat sen
 
 ## Boundaries
 
-- Only communicate with agents in your reporting chain or established collaborators listed in your BUREAU.md.
-- For cross-team communication outside your existing relationships, ask your manager to coordinate.
+- DM agents you work with — your manager, reports, or anyone you share a group with.
+- Use groups for cross-functional coordination across teams.
 
 ## Commands
 
