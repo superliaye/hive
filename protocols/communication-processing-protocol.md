@@ -1,39 +1,34 @@
 # Communication Processing Protocol
 
-How agents process incoming messages. Only loaded when the agent has unread messages.
+You communicate with other agents through **direct messages** (DM) and **group channels**, using the `hive chat` CLI.
 
-## Your Messages
+## How Communication Works
 
-When you're activated with unread messages, you see all of them. You decide what's important, what needs a response, and what to ignore. There is no pre-filtering — you are the triage.
+The daemon monitors channels for new messages. When a message arrives for you, it triages it (ACT_NOW, NOTE, or IGNORE) and invokes you with the message in your work input. Your stdout response is posted back to the sender automatically.
 
-## Responding
+For outbound or follow-up messages beyond your auto-response, use `hive chat send`.
+
+## Two Channel Types
+
+- **DM** — 1:1 with another agent. Created automatically on first message. Use for directed communication.
+- **Group** — Named channels with multiple members. Created explicitly. Use for team-wide discussion.
+
+## Processing Inbound Messages
 
 - Read all messages before responding. Understand the full picture first.
-- If you can't help, say so explicitly and suggest who might be able to.
-- If the message is misdirected, acknowledge and redirect.
 - Not every message needs a response. Use judgment — silence is acceptable for messages that don't require your input.
+- If a message is misdirected, acknowledge and redirect.
 
 ## Directed vs Broadcast
 
-- **Directed messages** (DMs, messages mentioning you by alias): respond via DM to the sender.
-- **Broadcast messages** (team channel, no specific mention): respond on the team channel only if you have something substantive to add. Not every broadcast needs a reply from every agent.
-
-## Sending Messages
-
-For directed communication to a specific agent:
-```bash
-hive chat send @alias "message"
-```
-
-For messages to a group:
-```bash
-hive chat send #group-name "message"
-```
-
-Your identity is injected via environment. No `--as` flag needed.
+- **Directed** (DMs, messages mentioning you): respond via DM to the sender.
+- **Broadcast** (group channel, no specific mention): respond on the group only if you have something substantive to add.
 
 ## Boundaries
 
-- Only communicate with agents in your reporting chain or established collaborators in your BUREAU.md.
+- Only communicate with agents in your reporting chain or established collaborators listed in your BUREAU.md.
 - For cross-team communication outside your existing relationships, ask your manager to coordinate.
-- Never post to channels you're not a member of.
+
+## Commands
+
+For full usage, run `hive chat --help`. For detailed communication guidelines, see the `hive-comms` skill.

@@ -6,6 +6,7 @@ import { triageMessages } from '../gateway/triage.js';
 import { spawnClaude, buildClaudeArgs } from '../agents/spawner.js';
 import { assemblePrompt } from '../agents/prompt-assembler.js';
 import type { AgentStateStore } from '../state/agent-state.js';
+import type { AuditStore } from '../audit/store.js';
 import type { CheckWorkResult, UnreadMessage } from './types.js';
 import fs from 'fs';
 import path from 'path';
@@ -13,11 +14,17 @@ import path from 'path';
 export interface CheckWorkContext {
   agent: AgentConfig;
   stateStore: AgentStateStore;
+  audit: AuditStore;
   orgAgents: Map<string, AgentConfig>;
 
   getUnread: (agentId: string) => Promise<UnreadMessage[]>;
   markRead: (agentId: string, messageIds: string[]) => Promise<void>;
   postMessage: (agentId: string, channel: string, content: string, opts?: { thread?: string }) => Promise<void>;
+
+  /** Optional: memory manager for semantic search over agent memories. */
+  memorySearch?: (agentId: string, query: string, limit?: number) => Promise<{ text: string; path: string; score: number }[]>;
+  /** Optional: re-index agent memories after writes. */
+  memoryReindex?: (agentId: string, agentDir: string) => Promise<void>;
 }
 
 function toScorerInput(msg: UnreadMessage): Omit<ScoredMessage, 'score'> {
@@ -58,7 +65,8 @@ function buildWorkInput(messages: ScoredMessage[], triageResults: TriageResult[]
     '',
     'Review the above messages and take appropriate action.',
     'You may update your PRIORITIES.md if these messages change your work priorities.',
-    'Post your response in the relevant channel(s).',
+    '',
+    'Use `hive chat send @alias "message"` for follow-up messages. See the hive-comms skill for guidelines.',
   ].join('\n');
 }
 
@@ -77,6 +85,89 @@ function appendToMemoryFile(agentDir: string, entry: string): void {
 }
 
 /**
+ * Fire-and-forget haiku call to summarize what the agent did.
+ * Updates the audit record's action_summary when complete.
+ */
+function summarizeAction(
+  responseText: string,
+  invocationId: string,
+  audit: AuditStore,
+  log: (msg: string) => void,
+): void {
+  const snippet = responseText.slice(0, 500);
+  const args = buildClaudeArgs({
+    model: 'haiku',
+    systemPrompt: 'Summarize what this agent did in 3-6 words. Output ONLY the summary, nothing else. Examples: "Delegated task to platform-eng", "Posted status update to #board", "Clarified routing issue"',
+    tools: [],
+    outputFormat: 'json',
+  });
+
+  spawnClaude(args, { cwd: process.cwd(), input: snippet, timeoutMs: 15_000 })
+    .then(result => {
+      let summary = result.stdout.trim();
+      // Unwrap JSON envelope
+      try {
+        const envelope = JSON.parse(summary);
+        if (envelope.result) summary = envelope.result;
+      } catch { /* use raw */ }
+      summary = summary.replace(/^["']|["']$/g, '').trim();
+      if (summary && summary.length < 100) {
+        audit.updateActionSummary(invocationId, summary);
+        log(`action summary: ${summary}`);
+      }
+    })
+    .catch(() => { /* best-effort, ignore failures */ });
+}
+
+/**
+ * Resolve the correct channel for posting an auto-response.
+ *
+ * For DMs, board, approvals → respond on the same channel.
+ * For team channels → route to the DM between the responding agent and the
+ * original sender, so other team members aren't flooded with noise.
+ * Falls back to the original channel if no DM exists (e.g. super-user sender).
+ */
+function resolveResponseChannel(
+  originChannel: string,
+  msgs: ScoredMessage[],
+  respondingAgent: AgentConfig,
+  orgAgents: Map<string, AgentConfig>,
+): string {
+  // DMs, board, approvals — always respond in-place
+  if (originChannel.startsWith('dm:') || originChannel === 'board' || originChannel === 'approvals' || originChannel === 'ar-requests') {
+    return originChannel;
+  }
+
+  // Team channel with a single sender → route to DM
+  const senders = [...new Set(msgs.map(m => m.sender))];
+  if (senders.length !== 1) {
+    // Multiple senders on team channel — respond there (true broadcast)
+    return originChannel;
+  }
+
+  const senderId = senders[0];
+  // super-user has no DM channel
+  if (senderId === 'super-user') return originChannel;
+
+  // Find the DM channel between responding agent and sender.
+  // DM naming convention: dm:<child-id> where members are parent + child.
+  const senderAgent = orgAgents.get(senderId);
+  if (!senderAgent) return originChannel;
+
+  // Check if responding agent is the child (sender is parent)
+  if (respondingAgent.parentId === senderId) {
+    return `dm:${respondingAgent.id}`;
+  }
+  // Check if sender is the child (responding agent is parent)
+  if (senderAgent.parentId === respondingAgent.id) {
+    return `dm:${senderId}`;
+  }
+
+  // No parent-child relationship (peers) — stay on team channel
+  return originChannel;
+}
+
+/**
  * CheckWork: the sole entry point for agent invocations.
  *
  * Flow:
@@ -85,7 +176,7 @@ function appendToMemoryFile(agentDir: string, entry: string): void {
  * 3. If empty → return (ZERO LLM calls)
  * 4. Score deterministically
  * 5. Triage via LLM (haiku) → classify ACT_NOW / NOTE / IGNORE
- *    - No QUEUE dumping into PRIORITIES.md — agent manages its own priorities via Write tool
+ *    - Override: super-user on #board → always ACT_NOW
  * 6. Process NOTE → append to memory file, mark read
  * 7. Process IGNORE → mark read
  * 8. If any ACT_NOW → set state=working → spawn main agent → post results → set state=idle
@@ -95,10 +186,12 @@ function appendToMemoryFile(agentDir: string, entry: string): void {
 export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult> {
   const start = Date.now();
   const { agent, stateStore } = ctx;
+  const log = (msg: string) => console.log(`[checkWork:${agent.id}] ${msg}`);
 
   // Guard: skip if already working
   const currentState = stateStore.get(agent.id);
   if (currentState?.status === 'working') {
+    log(`skipped — already working (PID: ${currentState.pid})`);
     return {
       agentId: agent.id,
       inboxCount: 0,
@@ -126,11 +219,15 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       };
     }
 
+    log(`inbox: ${unread.length} message(s)`);
+    for (const m of unread) log(`  [${m.channel}] @${m.sender}: ${m.content.slice(0, 80)}`);
+
     // Score deterministically
     const scorerInputs = unread.map(toScorerInput);
     const ranked = rankMessages(scorerInputs, agent, DEFAULT_SCORING_WEIGHTS, ctx.orgAgents);
 
     // Triage via LLM
+    log('triaging...');
     const triageResults = await triageMessages(ranked, {
       agentId: agent.id,
       agentDir: agent.dir,
@@ -138,11 +235,24 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       bureau: agent.files.bureau,
     });
 
+    // Override: messages from super-user on #board or #approvals are ALWAYS ACT_NOW
+    // This enforces the Direct Channels contract from BUREAU.md
+    for (const result of triageResults) {
+      const msg = ranked.find(m => m.messageId === result.messageId);
+      if (msg && msg.sender === 'super-user' && (msg.channel === 'board' || msg.channel === 'approvals') && result.classification !== 'ACT_NOW') {
+        log(`override: ${result.classification} → ACT_NOW (super-user on #${msg.channel})`);
+        result.classification = 'ACT_NOW';
+        result.reasoning = `Direct message from super-user on #${msg.channel} — always ACT_NOW`;
+      }
+    }
+
     const actNow = triageResults.filter(r => r.classification === 'ACT_NOW');
     const notes = triageResults.filter(r => r.classification === 'NOTE');
     const ignore = triageResults.filter(r => r.classification === 'IGNORE');
-    // QUEUE treated same as NOTE — agent internalizes during main invocation
     const queue = triageResults.filter(r => r.classification === 'QUEUE');
+
+    log(`triage: ACT_NOW=${actNow.length} NOTE=${notes.length} QUEUE=${queue.length} IGNORE=${ignore.length}`);
+    for (const r of triageResults) log(`  ${r.messageId.slice(0, 8)}: ${r.classification} — ${r.reasoning}`);
 
     // Process IGNORE — mark read
     if (ignore.length > 0) {
@@ -160,11 +270,14 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     }
     if (noteAndQueue.length > 0) {
       await ctx.markRead(agent.id, noteAndQueue.map(r => r.messageId));
+      // Re-index memory after writing new notes
+      ctx.memoryReindex?.(agent.id, agent.dir).catch(() => {});
     }
 
     // Process ACT_NOW — invoke main agent
     let agentInvoked = false;
     if (actNow.length > 0) {
+      log(`invoking agent (${actNow.length} ACT_NOW messages)...`);
       stateStore.updateStatus(agent.id, 'working', {
         pid: process.pid,
         currentTask: `Processing ${actNow.length} message(s)`,
@@ -172,21 +285,89 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
 
       try {
         const systemPrompt = assemblePrompt(agent);
-        const workInput = buildWorkInput(ranked, triageResults);
+        let workInput = buildWorkInput(ranked, triageResults);
+
+        // Enrich with relevant memories via vector search
+        if (ctx.memorySearch) {
+          try {
+            const actNowContent = ranked
+              .filter(m => actNow.some(r => r.messageId === m.messageId))
+              .map(m => m.content)
+              .join(' ');
+            const memories = await ctx.memorySearch(agent.id, actNowContent, 5);
+            if (memories.length > 0) {
+              const memorySection = memories
+                .map(m => `- (${path.basename(m.path)}) ${m.text.slice(0, 300)}`)
+                .join('\n');
+              workInput += `\n\n# Relevant Memories\n\n${memorySection}`;
+            }
+          } catch (err) {
+            log(`memory search failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
         const args = buildClaudeArgs({
           model: agent.identity.model,
           systemPrompt,
           tools: agent.identity.tools,
+          outputFormat: 'json',
         });
 
+        log(`spawning claude (model: ${agent.identity.model})...`);
         const workResult = await spawnClaude(args, {
           cwd: agent.dir,
           input: workInput,
-          timeoutMs: 300_000,
         });
 
+        // Extract text from JSON output
+        let responseText = workResult.stdout.trim();
+        try {
+          const parsed = JSON.parse(responseText);
+          if (parsed.result) {
+            responseText = parsed.result;
+          }
+        } catch {
+          // Non-JSON fallback — use raw stdout
+        }
+
+        log(`claude exited ${workResult.exitCode} (${workResult.durationMs}ms, tokens: ${workResult.tokensIn ?? 0}in/${workResult.tokensOut ?? 0}out)`);
+        if (workResult.stderr) log(`stderr: ${workResult.stderr.slice(0, 300)}`);
+
+        // Extract ACTION: tag from response (option 2: agent self-reports)
+        let actionSummary: string | undefined;
+        const actionMatch = responseText.match(/^ACTION:\s*(.+)$/m);
+        if (actionMatch) {
+          actionSummary = actionMatch[1].trim();
+          // Strip the ACTION: line from the response before posting to channels
+          responseText = responseText.replace(/\n?^ACTION:\s*.+$/m, '').trim();
+        }
+
+        // Log invocation to audit store
+        const actNowChannels = [...new Set(ranked.filter(m =>
+          actNow.some(r => r.messageId === m.messageId)
+        ).map(m => m.channel))];
+        const invocationId = ctx.audit.logInvocation({
+          agentId: agent.id,
+          invocationType: 'checkWork',
+          model: agent.identity.model,
+          tokensIn: workResult.tokensIn,
+          tokensOut: workResult.tokensOut,
+          cacheReadTokens: workResult.cacheReadTokens,
+          cacheCreationTokens: workResult.cacheCreationTokens,
+          durationMs: workResult.durationMs,
+          inputSummary: `${actNow.length} ACT_NOW message(s) from ${actNowChannels.map(c => '#' + c).join(', ')}`,
+          outputSummary: responseText.slice(0, 200),
+          actionSummary,
+          channel: actNowChannels[0],
+        });
+
+        // Fallback (option 4): if agent didn't include ACTION: tag, use haiku to summarize
+        if (!actionSummary && responseText) {
+          summarizeAction(responseText, invocationId, ctx.audit, log);
+        }
+
         // Post results to channels that had ACT_NOW messages
-        if (workResult.exitCode === 0 && workResult.stdout.trim()) {
+        // Route directed responses to DMs instead of team channels to reduce noise
+        if (workResult.exitCode === 0 && responseText) {
           const actNowMessages = ranked.filter(m =>
             actNow.some(r => r.messageId === m.messageId)
           );
@@ -198,12 +379,19 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           }
           for (const [channel, msgs] of byChannel) {
             const thread = msgs[0].thread;
-            await ctx.postMessage(agent.id, channel, workResult.stdout.trim(), thread ? { thread } : undefined);
+            const targetChannel = resolveResponseChannel(channel, msgs, agent, ctx.orgAgents);
+            log(`posting response to #${targetChannel} (${responseText.length} chars)`);
+            await ctx.postMessage(agent.id, targetChannel, responseText, thread ? { thread } : undefined);
           }
+        } else if (workResult.exitCode !== 0) {
+          log(`WARNING: claude failed with exit code ${workResult.exitCode}`);
+        } else {
+          log(`WARNING: claude returned empty output`);
         }
 
         agentInvoked = true;
       } catch (err) {
+        log(`ERROR invoking agent: ${err instanceof Error ? err.message : String(err)}`);
         stateStore.updateStatus(agent.id, 'idle');
         return {
           agentId: agent.id,
@@ -220,6 +408,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
 
     // Return to idle
     stateStore.updateStatus(agent.id, 'idle');
+    log(`done (${Date.now() - start}ms, invoked=${agentInvoked})`);
 
     return {
       agentId: agent.id,
@@ -229,6 +418,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       durationMs: Date.now() - start,
     };
   } catch (err) {
+    log(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     stateStore.updateStatus(agent.id, 'idle');
     return {
       agentId: agent.id,

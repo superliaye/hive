@@ -2,20 +2,19 @@ import fs from 'fs';
 import path from 'path';
 
 const ROLE_MAPPING: Record<string, string> = {
-  'ceo': 'ceo',
-  'chief executive': 'ceo',
-  'vp': 'engineering',
-  'engineer': 'engineering',
-  'developer': 'engineering',
-  'backend': 'engineering',
-  'frontend': 'engineering',
-  'product': 'product',
-  'pm': 'product',
-  'designer': 'design',
-  'design': 'design',
-  'qa': 'testing',
-  'test': 'testing',
-  'tester': 'testing',
+  'chief-executive': 'chief-executive',
+  'ceo': 'chief-executive',
+  'agent-resources': 'agent-resources',
+  'department-head': 'department-head',
+  'software-engineer': 'software-engineer',
+  'engineer': 'software-engineer',
+  'developer': 'software-engineer',
+  'product-analyst': 'product-analyst',
+  'product-manager': 'product-manager',
+  'designer': 'designer',
+  'qa-engineer': 'qa-engineer',
+  'qa': 'qa-engineer',
+  'tester': 'qa-engineer',
 };
 
 function matchRoleDir(role: string): string {
@@ -32,7 +31,32 @@ export interface SkillResolution {
   role: string[];      // Paths to role-specific skill dirs
 }
 
-export function resolveSkillsForAgent(role: string, skillsRoot: string): SkillResolution {
+export function resolveSkillsForAgent(
+  role: string,
+  skillsRoot: string,
+  declaredSkills?: string[],
+): SkillResolution {
+  // Explicit skills take precedence over role-based mapping
+  if (declaredSkills && declaredSkills.length > 0) {
+    const skillPaths: string[] = [];
+    const dirs = fs.existsSync(skillsRoot)
+      ? fs.readdirSync(skillsRoot, { withFileTypes: true }).filter(e => e.isDirectory())
+      : [];
+    for (const skillName of declaredSkills) {
+      const candidates = [
+        path.join(skillsRoot, 'shared', skillName),
+        ...dirs.filter(d => d.name !== 'shared').map(d => path.join(skillsRoot, d.name, skillName)),
+      ];
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          skillPaths.push(candidate);
+          break;
+        }
+      }
+    }
+    return { roleDir: 'explicit', shared: [], role: skillPaths };
+  }
+
   const roleDir = matchRoleDir(role);
   const shared: string[] = [];
   const rolePaths: string[] = [];
