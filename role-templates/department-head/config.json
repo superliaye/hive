@@ -4,7 +4,7 @@
   "model": "claude-opus-4-6",
   "emoji": "📋",
   "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
-  "mcp": [],
+  "mcp": ["playwright"],
   "skills": ["hive-comms"],
   "_note": "name, role, and emoji are customized on instantiation based on department"
 }
