@@ -51,8 +51,6 @@ Run `hive chat <command> --help` for full flags and options.
 - Not every broadcast needs a reply. Respond only if you have something substantive.
 
 **Boundaries:**
-- DM agents you work with — your manager, reports, or anyone you share a group with.
-- Use groups for cross-functional coordination. That's what they're for.
 - Only CEO can message super-user.
 
 ## Groups

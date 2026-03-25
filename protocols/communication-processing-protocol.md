@@ -26,8 +26,7 @@ For outbound or follow-up messages beyond your auto-response, use `hive chat sen
 
 ## Boundaries
 
-- DM agents you work with — your manager, reports, or anyone you share a group with.
-- Use groups for cross-functional coordination across teams.
+- Only CEO can message super-user. No other restrictions — DM or group anyone in the org.
 
 ## Commands
 
