@@ -5,5 +5,5 @@
   "emoji": "🎨",
   "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
   "mcp": ["playwright"],
-  "skills": []
+  "skills": ["hive-comms"]
 }

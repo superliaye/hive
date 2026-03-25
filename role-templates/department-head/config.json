@@ -5,6 +5,6 @@
   "emoji": "📋",
   "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
   "mcp": [],
-  "skills": [],
+  "skills": ["hive-comms"],
   "_note": "name, role, and emoji are customized on instantiation based on department"
 }
