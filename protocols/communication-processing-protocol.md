@@ -20,15 +20,17 @@ When you're activated with unread messages, you see all of them. You decide what
 
 ## Sending Messages
 
-For directed communication to a specific agent, use their DM channel:
+For directed communication to a specific agent:
 ```bash
-hive post --channel dm:<agent-alias> --as <your-alias> "message"
+hive chat send @alias "message"
 ```
 
-For broadcasts that the whole team needs to see:
+For messages to a group:
 ```bash
-hive post --channel team-<department> --as <your-alias> "message"
+hive chat send #group-name "message"
 ```
+
+Your identity is injected via environment. No `--as` flag needed.
 
 ## Boundaries
 

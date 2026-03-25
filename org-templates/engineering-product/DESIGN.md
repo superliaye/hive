@@ -63,11 +63,14 @@ Agents process events during activation and mark them as processed.
 Events have timestamps and are machine-written.
 Agents decide how to act on events (update BUREAU.md, adjust priorities, etc.).
 
-### 8. Communication is DM-first
+### 8. Two channel types: DM and Group
 
-Directed messages use DM channels (`dm:<agent-id>`).
-Team channels are for broadcasts only.
-Comms happen via CLI: `hive msg @<name> "message"` (agent identity injected via env).
+- **DM** — exactly 2 people, created lazily on first message.
+- **Group** — N people, created explicitly via `hive chat group create`.
+
+No special named channels. Team channels are just groups created on demand. Any agent can create/manage groups. Cross-functional groups (2 engineers, 1 PM, 1 QA) are first-class.
+
+Communication via CLI: `hive chat send @alias "message"` (agent identity injected via `HIVE_AGENT_ID` env var). Gateway converts inbound messages to `MSG_RECEIVED` events in agent.db before activation — agents see messages as events, respond via `hive chat send`.
 
 ## Org-State Schema
 
@@ -107,7 +110,7 @@ Key properties:
 - `reporting` is temporal — full history of every reorg via `effective_from`/`effective_until`
 - `people.id` is monotonically increasing — never reused
 - `people.folder` maps to the flat directory name (e.g., `003-platform-eng`)
-- Channels are derived from `reporting` table, managed by existing comms system
+- Channels (DMs + groups) stored alongside people in `org-state.db`, managed by chat module
 
 ## Growth Stages
 

@@ -9,21 +9,21 @@ A general-purpose framework for building autonomous agent organizations. Agents 
 ## System Overview
 
 ```
-                    super-user
+                    super-user (id=0)
                         |
-                   [#board channel]
+                      [DM]
                         |
                     +-------+
-                    |  CEO  |  (root agent)
+                    |  CEO  |  (id=1, root agent)
                     +-------+
                    /    |    \
-             [dm:ar] [dm:eng] [dm:qa]
+               [DM]  [DM]   [DM]
                /        |        \
            +----+  +--------+  +------+
            | AR |  |plat-eng|  |qa-eng|
            +----+  +--------+  +------+
                 \       |       /
-              [#team-ceo channel]
+              [Group: eng-team]
 ```
 
 ## Core Data Flow
@@ -67,7 +67,7 @@ The agent (opus) handles all decision-making: triage, prioritization, response, 
 
 ```
 src/
-├── cli.ts                 CLI entry point (hive init|start|stop|post|dashboard)
+├── cli.ts                 CLI entry point (hive init|start|stop|chat|dashboard)
 ├── context.ts             HiveContext — creates all stores, parses org, wires deps
 ├── types.ts               Core interfaces: AgentConfig, OrgChart, ChannelDef, AgentState
 │
@@ -90,13 +90,14 @@ src/
 │   ├── spawner.ts         Spawn `claude -p` process. Extract tokens. JSON output.
 │   ├── prompt-assembler.ts Assemble system prompt from agent files + conditional protocols
 │   ├── skill-loader.ts    Load skill definitions from skills/ directory
-│   └── config-loader.ts   Parse IDENTITY.md frontmatter → AgentIdentity
+│   └── config-loader.ts   Parse config.json → agent spawn configuration
 │
-├── comms/
-│   ├── sqlite-provider.ts SQLite backend: channels, messages, read_receipts, FTS5 search
-│   ├── channel-manager.ts Sync org chart channels into DB. ensureChannel() for organic channels.
-│   ├── types.ts           Message, Channel, ICommsProvider interface
-│   └── cli-commands.ts    Terminal post/observe commands
+├── chat/
+│   ├── db.ts              Chat tables in org-state.db (channels, messages, read_cursors)
+│   ├── channels.ts        DM (lazy) + Group (explicit) CRUD
+│   ├── messages.ts        Send, history (with default limit + ranges), search
+│   ├── cursors.ts         Per-person per-channel read cursors, inbox/ack
+│   └── cli.ts             `hive chat` CLI subcommands
 │
 ├── memory/
 │   ├── indexer.ts         Chunk daily logs + MEMORY.md, embed with nomic-embed-text
@@ -121,21 +122,72 @@ src/
     └── crash-recovery.ts  3 crashes in 10min → rate limit
 ```
 
-## Channel Topology
+## Communication — `hive chat`
 
-Channels are generated from the org tree (and eventually from org-state.db reporting table).
+Chat is a module inside hive (`src/chat/`). It owns channel and message storage in `org-state.db`, reads `people` from the same DB. Fully testable in isolation.
 
-| Pattern | Example | Members | Purpose |
-|---------|---------|---------|---------|
-| `board` | `#board` | Root agent only | Super-user ↔ CEO interface |
-| `approvals` | `#approvals` | Root agent only | Approval workflow |
-| `team-<id>` | `#team-ceo` | Manager + direct reports | Team coordination |
-| `dm:<agent-id>` | `#dm:ceo-ar` | Parent + child (2 members) | 1:1 private communication |
-| `ar-requests` | `#ar-requests` | CEO + AR | Agent provisioning |
+### Two Channel Types
 
-**Scale design**: An agent is only a member of channels relevant to its hierarchy position. A leaf agent belongs to ~3 channels (its DM, its team channel, ar-requests if AR). A message on one channel only triggers activation for 2-8 agents, not the entire org.
+| Type | Creation | Members | Example |
+|------|----------|---------|---------|
+| **DM** | Lazy (first message creates it) | Exactly 2 people | dm between CEO and AR |
+| **Group** | Explicit (`hive chat group create`) | N people | eng-team, cross-func sprint |
 
-**No #all-hands by design**. Broadcasts go through team channels which fan out through the hierarchy. Cross-team communication flows: agent → manager → other-manager → target.
+No special named channels (`#board`, `#approvals`, `#team-*`). Team channels are just groups created on demand. Any agent can create, delete, and manage groups they belong to.
+
+### CLI Commands
+
+Identity is injected via `HIVE_AGENT_ID` env var. No `--as` flag.
+
+```
+hive chat send @alias "message"          # DM (channel created lazily)
+hive chat send #group "message"          # Message to group
+
+hive chat inbox                          # Unread messages (rarely used — gateway handles)
+hive chat ack @alias <seq>               # Advance read cursor (rarely used)
+
+hive chat history @alias [--limit N]     # DM history (default 20, shows "N of M total")
+hive chat history #group [--limit N]     # Group history
+hive chat history @alias --range 10:30   # Messages seq 10-30
+hive chat history @alias --all           # Full history
+hive chat search "query"                 # Search across all channels
+
+hive chat group create "name" @a @b @c   # Create group
+hive chat group list                     # Groups you belong to
+hive chat group add #name @alias         # Add member
+hive chat group remove #name @alias      # Remove member
+hive chat group delete #name             # Delete group
+```
+
+### Message Model
+
+- Per-channel sequential IDs (monotonically increasing)
+- Per-person per-channel read cursors (Kafka-style)
+- Crash-safe: cursor only advances after message is processed
+- History output: `Showing 20 of 47 messages in dm:alice (seq 28-47)`
+
+### Gateway Integration
+
+The gateway handles inbound messages for agents automatically:
+
+1. Gateway checks for unread messages (read cursors)
+2. Gateway writes `MSG_RECEIVED` events to agent's `agent.db` events table
+3. Gateway advances read cursors
+4. Agent sees messages as events during activation, responds via `hive chat send`
+
+Crash safety: events are written to `agent.db` **before** cursors advance. If crash between steps 2 and 3, messages become duplicate events on next cycle — deduped by message seq ID.
+
+### Access Control
+
+- Only CEO (+ optionally department heads) can message super-user (id=0)
+- Super-user cannot be added to groups
+- Agents can only see channels they are members of
+
+### Scale Design
+
+An agent is only a member of channels relevant to its position. A leaf IC belongs to ~2-3 channels (DM with manager, maybe a group). A message on one channel only triggers activation for members, not the entire org.
+
+Cross-team communication: agents create ad-hoc groups for cross-functional work (2 engineers, 1 PM, 1 QA), or route through hierarchy.
 
 ## Agent File Structure
 
@@ -143,13 +195,14 @@ Each agent lives in a flat directory under `org/`:
 
 ```
 org/001-ceo/
-├── IDENTITY.md    Frontmatter: name, role, model, emoji, tools, skills
+├── config.json    Gateway-only: model, tools, mcp, skills (never in agent prompt)
+├── IDENTITY.md    Pure prose identity (no frontmatter, loaded into agent prompt)
 ├── SOUL.md        Personality, values, communication style
 ├── BUREAU.md      Org position, reporting structure, collaborator notes
 ├── PRIORITIES.md  Starting priorities (structured data in agent.db)
 ├── MEMORY.md      Agent's curated long-term memory (agent-written)
 ├── EVENTS.md      Unprocessed events template (structured data in agent.db)
-├── agent.db       Per-agent SQLite: priorities, events tables
+├── agent.db       Per-agent SQLite: priorities, events, memory index
 └── memory/        Daily activity logs (YYYY-MM-DD.md), gateway-written
 ```
 
@@ -159,10 +212,10 @@ All data is SQLite (WAL mode):
 
 ```
 Shared (org-level):
-├── comms.db         Channels, messages, read_receipts, channel_members, FTS5 index
+├── org-state.db     People, reporting hierarchy (temporal), resourcing audit,
+│                    channels, messages, read_cursors, channel_members
 ├── audit.db         Invocation log: tokens, duration, summaries, action_summary
-├── orchestrator.db  Agent state: status, last_invocation, last_heartbeat, pid
-└── org-state.db     People (super-user + agents), reporting hierarchy (temporal), resourcing audit
+└── orchestrator.db  Agent state: status, last_invocation, last_heartbeat, pid
 
 Per-agent (in agent folder):
 └── agent.db         Priorities, events, memory index (chunks, FTS5, sqlite-vec)
@@ -175,12 +228,12 @@ Per-agent (in agent folder):
 The gateway checks three triggers per agent each cycle:
 
 1. **Events** — unprocessed events exist in agent.db
-2. **Communications** — unread messages exist in inbox
+2. **Communications** — unread messages in inbox (gateway converts to `MSG_RECEIVED` events in agent.db, advances cursors)
 3. **Priorities** — ACTIVE priorities exist (agent has ongoing work)
 
 When **any** trigger fires, the agent is activated. When none are true, no-op.
 
-Protocols are conditionally loaded based on which triggers fired — don't bloat context with irrelevant instructions.
+Messages are converted to events before activation — the agent sees all input as events. Protocols are conditionally loaded based on which triggers fired — don't bloat context with irrelevant instructions.
 
 ## Memory System
 
@@ -198,13 +251,12 @@ Protocols are conditionally loaded based on which triggers fired — don't bloat
 4. **Hot reload**: Daemon rescans org/ directory on each tick for new/removed agents
 5. **Agent autonomy**: No agent modifies another agent's state. All influence through communication.
 6. **Gateway is dumb**: Gateway activates, records, indexes. Agent makes all decisions.
-7. **All agents use `hive msg`** for communication (identity injected via `HIVE_AGENT_ID` env var)
+7. **All agents use `hive chat send`** for communication (identity injected via `HIVE_AGENT_ID` and `HIVE_AGENT_NAME` env vars)
 
 ## Dependencies
 
 - `better-sqlite3` — Embedded database (WAL mode)
 - `commander` — CLI framework
-- `gray-matter` — YAML frontmatter parsing
 - `claude` CLI — Agent execution (spawned as child process)
 - `express` — Dashboard API server
 - `react` + `vite` + `tailwind` — Dashboard frontend
