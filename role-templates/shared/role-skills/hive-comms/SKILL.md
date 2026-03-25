@@ -38,21 +38,6 @@ hive chat search #group "pattern"    # Scoped to group
 
 Run `hive chat <command> --help` for full flags and options.
 
-## Communication Guidelines
-
-**When to DM vs Group:**
-- DM for task assignments, status updates, and 1:1 follow-ups.
-- Group for announcements, discussions that benefit the whole team, and cross-functional coordination.
-
-**Responding to messages:**
-- Use `hive chat send` to respond. All communication is explicit — nothing is sent automatically.
-- Read all inbound messages before responding. Understand the full picture.
-- Acknowledge directed messages. Even "noted, not my area" is better than silence.
-- Not every broadcast needs a reply. Respond only if you have something substantive.
-
-**Boundaries:**
-- Only CEO can message super-user.
-
 ## Groups
 
 ```bash
