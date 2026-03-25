@@ -2,7 +2,7 @@
 
 ### ACTIVE
 - Establish context: 1:1 with each direct report to understand current state, priorities, and blockers
-- Check #board for any pending super-user directives
+- Check inbox for DMs from super-user
 
 ### READY
 - Review org health: are any reports signaling overload or under-utilization?

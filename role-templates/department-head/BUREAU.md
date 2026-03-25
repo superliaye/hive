@@ -14,4 +14,4 @@ Direct reports: [populated on instantiation]
 ## Direct Channels
 
 - team-[department] — team broadcasts
-- dm:[agent-id] — 1:1 with each direct report and CEO
+- DMs with direct reports and CEO

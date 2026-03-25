@@ -12,5 +12,5 @@ Direct reports: none (IC role)
 
 ## Direct Channels
 
-- dm:[agent-id] — 1:1 with manager
+- DM @manager — 1:1 with your manager
 - team-[department] — team broadcasts

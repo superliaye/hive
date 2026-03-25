@@ -4,7 +4,7 @@
 - Establish context: 1:1 with manager (CEO) to understand current org state and any pending scaling needs
 
 ### READY
-- Monitor #ar-requests for provisioning requests
+- Check inbox for provisioning requests from CEO
 - Execute any pending scaling operations
 
 ### STANDING

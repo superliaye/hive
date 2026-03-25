@@ -120,54 +120,6 @@ function summarizeAction(
 }
 
 /**
- * Resolve the correct channel for posting an auto-response.
- *
- * For DMs, board, approvals → respond on the same channel.
- * For team channels → route to the DM between the responding agent and the
- * original sender, so other team members aren't flooded with noise.
- * Falls back to the original channel if no DM exists (e.g. super-user sender).
- */
-function resolveResponseChannel(
-  originChannel: string,
-  msgs: ScoredMessage[],
-  respondingAgent: AgentConfig,
-  orgAgents: Map<string, AgentConfig>,
-): string {
-  // DMs, board, approvals — always respond in-place
-  if (originChannel.startsWith('dm:') || originChannel === 'board' || originChannel === 'approvals' || originChannel === 'ar-requests') {
-    return originChannel;
-  }
-
-  // Team channel with a single sender → route to DM
-  const senders = [...new Set(msgs.map(m => m.sender))];
-  if (senders.length !== 1) {
-    // Multiple senders on team channel — respond there (true broadcast)
-    return originChannel;
-  }
-
-  const senderId = senders[0];
-  // super-user has no DM channel
-  if (senderId === 'super-user') return originChannel;
-
-  // Find the DM channel between responding agent and sender.
-  // DM naming convention: dm:<child-id> where members are parent + child.
-  const senderAgent = orgAgents.get(senderId);
-  if (!senderAgent) return originChannel;
-
-  // Check if responding agent is the child (sender is parent)
-  if (respondingAgent.parentId === senderId) {
-    return `dm:${respondingAgent.id}`;
-  }
-  // Check if sender is the child (responding agent is parent)
-  if (senderAgent.parentId === respondingAgent.id) {
-    return `dm:${senderId}`;
-  }
-
-  // No parent-child relationship (peers) — stay on team channel
-  return originChannel;
-}
-
-/**
  * CheckWork: the sole entry point for agent invocations.
  *
  * Flow:
@@ -179,7 +131,7 @@ function resolveResponseChannel(
  *    - Override: super-user on #board → always ACT_NOW
  * 6. Process NOTE → append to memory file, mark read
  * 7. Process IGNORE → mark read
- * 8. If any ACT_NOW → set state=working → spawn main agent → post results → set state=idle
+ * 8. If any ACT_NOW → set state=working → spawn main agent → log to audit → set state=idle
  * 9. Mark ACT_NOW as read
  * 10. Return recheckImmediately=true if work was performed (catch new messages)
  */
@@ -365,27 +317,9 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           summarizeAction(responseText, invocationId, ctx.audit, log);
         }
 
-        // Post results to channels that had ACT_NOW messages
-        // Route directed responses to DMs instead of team channels to reduce noise
-        if (workResult.exitCode === 0 && responseText) {
-          const actNowMessages = ranked.filter(m =>
-            actNow.some(r => r.messageId === m.messageId)
-          );
-          const byChannel = new Map<string, ScoredMessage[]>();
-          for (const msg of actNowMessages) {
-            const existing = byChannel.get(msg.channel) ?? [];
-            existing.push(msg);
-            byChannel.set(msg.channel, existing);
-          }
-          for (const [channel, msgs] of byChannel) {
-            const thread = msgs[0].thread;
-            const targetChannel = resolveResponseChannel(channel, msgs, agent, ctx.orgAgents);
-            log(`posting response to #${targetChannel} (${responseText.length} chars)`);
-            await ctx.postMessage(agent.id, targetChannel, responseText, thread ? { thread } : undefined);
-          }
-        } else if (workResult.exitCode !== 0) {
+        if (workResult.exitCode !== 0) {
           log(`WARNING: claude failed with exit code ${workResult.exitCode}`);
-        } else {
+        } else if (!responseText) {
           log(`WARNING: claude returned empty output`);
         }
 

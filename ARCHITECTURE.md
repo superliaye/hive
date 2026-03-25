@@ -89,7 +89,7 @@ src/
 ├── agents/
 │   ├── spawner.ts         Spawn `claude -p` process. Extract tokens. JSON output.
 │   ├── prompt-assembler.ts Assemble system prompt from agent files + conditional protocols
-│   ├── skill-loader.ts    Load skill definitions from skills/ directory
+│   ├── skill-loader.ts    Load skill definitions from role-skills/ directory
 │   └── config-loader.ts   Parse config.json → agent spawn configuration
 │
 ├── chat/
@@ -207,7 +207,7 @@ hive chat group delete #name                 # Delete group (any member, message
 - Per-channel sequential IDs (monotonically increasing)
 - Per-person per-channel read cursors (Kafka-style)
 - Crash-safe: cursor only advances after message is processed
-- History output header: `Showing 20 of 47 messages in dm:alice (seq 28-47)`
+- History output header: `Showing 20 of 47 messages in dm:1:2 (seq 28-47)`
 - All output includes: sender alias, seq ID, timestamp, full message content
 - DM channel ID: `dm:<lower_id>:<higher_id>` (internal, transparent to user)
 

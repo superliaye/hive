@@ -5,7 +5,7 @@
 
 ### READY
 - Check GitHub issues assigned to me
-- Review team channel for context
+- Check inbox for context from manager
 
 ### STANDING
 - Work on ONE task at a time — finish or explicitly pause before starting another
