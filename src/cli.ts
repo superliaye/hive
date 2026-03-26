@@ -171,6 +171,13 @@ agent
       console.log(`  ${chalk.bold('Template:')} ${opts.template}`);
       console.log(`  ${chalk.bold('Reports to:')} @${opts.reportsTo}`);
       console.log(`  ${chalk.bold('Dir:')} ${result.dir}`);
+
+      if (result.warnings.length > 0) {
+        console.log('');
+        for (const w of result.warnings) {
+          console.log(chalk.yellow(`  ⚠ ${w}`));
+        }
+      }
     } finally {
       chatDb.close();
     }
@@ -232,6 +239,29 @@ program
     const people = HiveContext.loadPeople(chatDb);
     const orgChart = await parseOrgFlat(orgDir, people);
     console.log(chalk.dim(`Found ${orgChart.agents.size} agents`));
+
+    // Health check before starting
+    const { runFullScan: healthScan } = await import('./validation/org-health.js');
+    const roleSkillsDir = path.resolve(process.cwd(), 'role-skills');
+    const healthIssues = healthScan({ orgDir, db: chatDb.raw(), roleSkillsDir });
+    const healthErrors = healthIssues.filter(i => i.severity === 'error');
+    if (healthErrors.length > 0) {
+      console.error(chalk.red(`\n✖ ${healthErrors.length} health error(s) — refusing to start:\n`));
+      for (const issue of healthErrors) {
+        console.error(chalk.red(`  [${issue.code}] ${issue.message}`));
+      }
+      console.error(chalk.dim('\nRun `hive doctor --fix` to attempt auto-repair, or fix manually.'));
+      chatDb.close();
+      process.exit(1);
+    }
+    const healthWarnings = healthIssues.filter(i => i.severity === 'warning');
+    if (healthWarnings.length > 0) {
+      console.log(chalk.yellow(`⚠ ${healthWarnings.length} warning(s) — starting anyway:`));
+      for (const w of healthWarnings) {
+        console.log(chalk.yellow(`  [${w.code}] ${w.message}`));
+      }
+      console.log('');
+    }
 
     // Auto-wire comms provider from SQLite
     const commsDb = path.join(dataDir, 'comms.db');
@@ -508,6 +538,82 @@ program
     });
 
     await new Promise(() => {}); // Keep alive
+  });
+
+// ── Doctor ──
+
+program
+  .command('doctor')
+  .description('Run health checks on the organization')
+  .option('--fix', 'Attempt to auto-fix fixable issues')
+  .action(async (opts) => {
+    const orgDir = getOrgDir();
+    const dataDir = getDataDir();
+    const roleSkillsDir = path.resolve(process.cwd(), 'role-skills');
+
+    const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
+    const { runFullScan, autoFix } = await import('./validation/org-health.js');
+
+    console.log(chalk.blue('Running org health checks...\n'));
+    const issues = runFullScan({ orgDir, db: chatDb.raw(), roleSkillsDir });
+
+    if (issues.length === 0) {
+      console.log(chalk.green('✔ Org is healthy — no issues found.'));
+      chatDb.close();
+      return;
+    }
+
+    const errors = issues.filter(i => i.severity === 'error');
+    const warnings = issues.filter(i => i.severity === 'warning');
+
+    if (errors.length > 0) {
+      console.log(chalk.red(`✖ ${errors.length} error(s):`));
+      for (const issue of errors) {
+        console.log(chalk.red(`  [${issue.code}] ${issue.message}`));
+      }
+    }
+    if (warnings.length > 0) {
+      console.log(chalk.yellow(`⚠ ${warnings.length} warning(s):`));
+      for (const issue of warnings) {
+        console.log(chalk.yellow(`  [${issue.code}] ${issue.message}`));
+      }
+    }
+
+    const fixable = issues.filter(i => i.autoFixable);
+    if (fixable.length > 0 && !opts.fix) {
+      console.log(chalk.dim(`\n${fixable.length} issue(s) can be auto-fixed. Run \`hive doctor --fix\` to apply.`));
+    }
+
+    if (opts.fix && fixable.length > 0) {
+      console.log(chalk.blue('\nApplying auto-fixes...'));
+
+      // Build MCP config lookup
+      const mcpFromConfig: Record<string, string[]> = {};
+      const people = chatDb.raw().prepare('SELECT alias, role_template FROM people WHERE status = ?').all('active') as { alias: string; role_template: string | null }[];
+      for (const p of people) {
+        if (!p.role_template) continue;
+        const configPath = path.join(process.cwd(), 'role-templates', p.role_template, 'config.json');
+        if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+          if (config.mcp) mcpFromConfig[p.alias] = config.mcp;
+        }
+      }
+
+      const fixResult = autoFix(fixable, { orgDir, roleSkillsDir, mcpFromConfig });
+      console.log(chalk.green(`  ✔ ${fixResult.fixed} fixed`));
+      if (fixResult.skipped > 0) {
+        console.log(chalk.yellow(`  ⚠ ${fixResult.skipped} skipped`));
+      }
+      for (const detail of fixResult.details) {
+        console.log(chalk.dim(`  ${detail}`));
+      }
+    }
+
+    chatDb.close();
+
+    if (errors.length > 0) {
+      process.exit(1);
+    }
   });
 
 program.parse();

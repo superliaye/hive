@@ -63,6 +63,7 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
       routine: '# Routine\nHeartbeat every 30min',
       memory: '# Memory',
       protocols: '',
+      skills: '',
     },
     ...overrides,
   };

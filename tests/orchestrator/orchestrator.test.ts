@@ -51,7 +51,7 @@ function makeAgent(alias: string, overrides: Partial<AgentConfig> = {}): AgentCo
     reportsTo: makePerson('ceo', { id: 99 }),
     directReports: [],
     files: {
-      identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '',
+      identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '', skills: '',
     },
     ...overrides,
   };

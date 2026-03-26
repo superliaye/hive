@@ -22,6 +22,7 @@ export function assemblePrompt(config: AgentConfig): string {
     config.files.soul,
     config.files.bureau,
     config.files.protocols,
+    config.files.skills,
     config.files.priorities,
     config.files.routine,
     config.files.memory,

@@ -55,7 +55,7 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
   const person = overrides.person ?? makePerson('ceo');
   return {
     person,
-    identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
+    identity: { id: 1, alias: 'ceo', name: 'CEO', role: 'CEO', model: 'sonnet' },
     dir: `/tmp/org/1-${person.alias}`,
     reportsTo: null,
     directReports: [makePerson('eng-1', { id: 2 })],
@@ -67,6 +67,7 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
       routine: '# Routine',
       memory: '',
       protocols: '',
+      skills: '',
     },
     ...overrides,
   };

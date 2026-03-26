@@ -33,7 +33,7 @@ function makeOrgChart(): OrgChart {
     depth: 0,
     parentId: null,
     childIds: [],
-    files: { identity: '', soul: '', bureau: '## Direct Channels\n- #board — immediate', priorities: '', routine: '', memory: '', protocols: '' },
+    files: { identity: '', soul: '', bureau: '## Direct Channels\n- #board — immediate', priorities: '', routine: '', memory: '', protocols: '', skills: '' },
   };
 
   return {

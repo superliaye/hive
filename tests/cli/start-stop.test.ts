@@ -30,7 +30,7 @@ vi.mock('../../src/org/parser.js', () => ({
       dir: '/tmp/org/1-ceo',
       reportsTo: null,
       directReports: [],
-      files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '' },
+      files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '', skills: '' },
       identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
     }]]),
     people: [{ id: 1, alias: 'ceo', name: 'CEO', status: 'active' }],
@@ -59,7 +59,7 @@ describe('CLI Helpers', () => {
         person: { id: 1, alias: 'ceo', name: 'CEO', status: 'active' as const },
         reportsTo: null,
         directReports: [],
-        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '## Heartbeat (every 10min)\nCheck #board', memory: '', protocols: '' },
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '## Heartbeat (every 10min)\nCheck #board', memory: '', protocols: '', skills: '' },
         identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
         dir: '/tmp/org/1-ceo',
       } as any)).toBe('persistent');
@@ -70,7 +70,7 @@ describe('CLI Helpers', () => {
         person: { id: 1, alias: 'ceo', name: 'CEO', status: 'active' as const },
         reportsTo: null,
         directReports: [],
-        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '' },
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '', skills: '' },
         identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
         dir: '/tmp/org/1-ceo',
       } as any)).toBe('persistent');
@@ -82,7 +82,7 @@ describe('CLI Helpers', () => {
         person: { id: 3, alias: 'eng-1', name: 'Engineer 1', status: 'active' as const, reportsTo: 1 },
         reportsTo: manager,
         directReports: [],
-        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '' },
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '', skills: '' },
         identity: { name: 'Engineer 1', role: 'Backend Software Engineer', model: 'sonnet' },
         dir: '/tmp/org/3-eng-1',
       } as any)).toBe('on-demand');
@@ -93,7 +93,7 @@ describe('CLI Helpers', () => {
         person: { id: 2, alias: 'ar', name: 'AR', status: 'active' as const, reportsTo: 1 },
         reportsTo: null,
         directReports: [],
-        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '## Schedule\nType: on-demand', memory: '', protocols: '' },
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '## Schedule\nType: on-demand', memory: '', protocols: '', skills: '' },
         identity: { name: 'AR', role: 'Agent Resources Manager', model: 'sonnet' },
         dir: '/tmp/org/2-ar',
       } as any)).toBe('on-demand');

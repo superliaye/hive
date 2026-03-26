@@ -22,6 +22,7 @@ export interface AgentConfig {
     routine: string;                // Full content of ROUTINE.md
     memory: string;                 // Full content of MEMORY.md
     protocols: string;              // Full content of protocols/ (shared)
+    skills: string;                 // Combined content of .claude/skills/*/SKILL.md
   };
   identity: AgentIdentity;         // Parsed from IDENTITY.md frontmatter
 }
@@ -46,7 +47,7 @@ export interface OrgChart {
 export interface AuditEntry {
   id: string;
   agentId: string;                   // alias from people table
-  invocationType: 'triage' | 'main' | 'memory' | 'proposal' | 'comms';
+  invocationType: 'triage' | 'main' | 'memory' | 'proposal' | 'comms' | 'checkWork';
   model: string;
   tokensIn?: number;
   tokensOut?: number;

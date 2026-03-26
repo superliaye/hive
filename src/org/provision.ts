@@ -12,6 +12,8 @@ import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 import type { Person } from '../types.js';
+import { resolveSkillsForAgent, copySkillsToAgent } from '../agents/skill-loader.js';
+import { checkIdentityFields, checkAgentFiles, checkSkills, checkMcpSettings } from '../validation/org-health.js';
 
 export interface ProvisionInput {
   alias: string;
@@ -26,11 +28,41 @@ export interface ProvisionResult {
   person: Person;
   folder: string;            // e.g., "5-alice"
   dir: string;               // absolute path to agent folder
+  warnings: string[];        // post-provisioning verification warnings
 }
 
 export interface ProvisionError {
   code: 'ALIAS_EXISTS' | 'MANAGER_NOT_FOUND' | 'TEMPLATE_NOT_FOUND' | 'ORG_DIR_MISSING';
   message: string;
+}
+
+/** Known MCP server configurations. */
+const MCP_REGISTRY: Record<string, { command: string; args: string[] }> = {
+  playwright: { command: 'npx', args: ['@anthropic/mcp-playwright'] },
+};
+
+/**
+ * Write .claude/settings.json with MCP server config for the agent.
+ */
+function writeMcpSettings(agentDir: string, mcpNames: string[]): void {
+  const mcpServers: Record<string, { command: string; args: string[] }> = {};
+  for (const name of mcpNames) {
+    const server = MCP_REGISTRY[name];
+    if (server) mcpServers[name] = server;
+  }
+  if (Object.keys(mcpServers).length === 0) return;
+
+  const claudeDir = path.join(agentDir, '.claude');
+  fs.mkdirSync(claudeDir, { recursive: true });
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  // Merge with existing settings if present
+  let settings: Record<string, unknown> = {};
+  if (fs.existsSync(settingsPath)) {
+    settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+  }
+  settings.mcpServers = { ...(settings.mcpServers as Record<string, unknown> ?? {}), ...mcpServers };
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 }
 
 /**
@@ -116,7 +148,7 @@ export function provision(
 
   // 3. Generate IDENTITY.md frontmatter
   // Read config.json for model/emoji/skills defaults
-  let config: { name?: string; model?: string; emoji?: string; skills?: string[] } = {};
+  let config: { name?: string; model?: string; emoji?: string; skills?: string[]; mcp?: string[] } = {};
   const configPath = path.join(tmplDir, 'config.json');
   if (fs.existsSync(configPath)) {
     config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -193,6 +225,21 @@ export function provision(
     }
   }
 
+  // 6. Copy skills from role-skills/ to agent's .claude/skills/
+  const roleSkillsDir = path.resolve(orgDir, '..', 'role-skills');
+  if (fs.existsSync(roleSkillsDir)) {
+    const resolved = resolveSkillsForAgent(roleSkillsDir, skills);
+    if (resolved.skills.length > 0) {
+      const agentClaudeDir = path.join(agentDir, '.claude');
+      copySkillsToAgent(resolved, agentClaudeDir);
+    }
+  }
+
+  // 7. Write MCP settings if config declares MCP servers
+  if (config.mcp && config.mcp.length > 0) {
+    writeMcpSettings(agentDir, config.mcp);
+  }
+
   const person: Person = {
     id: personId,
     alias: input.alias,
@@ -203,5 +250,21 @@ export function provision(
     reportsTo: manager.id,
   };
 
-  return { person, folder, dir: agentDir };
+  // 8. Post-provisioning verification
+  const warnings: string[] = [];
+  const identityIssues = checkIdentityFields(agentDir, input.alias);
+  const fileIssues = checkAgentFiles(agentDir, input.alias);
+  const roleSkillsDirResolved = path.resolve(orgDir, '..', 'role-skills');
+  const skillIssues = fs.existsSync(roleSkillsDirResolved)
+    ? checkSkills(agentDir, input.alias, skills, roleSkillsDirResolved)
+    : [];
+  const mcpIssues = config.mcp?.length
+    ? checkMcpSettings(agentDir, input.alias, config.mcp)
+    : [];
+
+  for (const issue of [...identityIssues, ...fileIssues, ...skillIssues, ...mcpIssues]) {
+    warnings.push(`[${issue.code}] ${issue.message}`);
+  }
+
+  return { person, folder, dir: agentDir, warnings };
 }

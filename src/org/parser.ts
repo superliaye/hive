@@ -51,6 +51,27 @@ async function loadMemory(dir: string): Promise<string> {
   return parts.join('\n\n');
 }
 
+/**
+ * Load all SKILL.md files from the agent's .claude/skills/ directory.
+ */
+async function loadSkills(dir: string): Promise<string> {
+  const skillsDir = path.join(dir, '.claude', 'skills');
+  try {
+    const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+    const parts: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const content = await fs.readFile(path.join(skillsDir, entry.name, 'SKILL.md'), 'utf-8');
+        if (content.trim()) parts.push(content.trim());
+      } catch { /* no SKILL.md in this dir */ }
+    }
+    return parts.join('\n\n---\n\n');
+  } catch {
+    return '';
+  }
+}
+
 export async function readAgentFiles(dir: string, sharedProtocols?: string): Promise<AgentConfig['files']> {
   const read = async (name: string): Promise<string> => {
     try {
@@ -67,6 +88,7 @@ export async function readAgentFiles(dir: string, sharedProtocols?: string): Pro
     routine: await read('ROUTINE.md'),
     memory: await loadMemory(dir),
     protocols: sharedProtocols ?? '',
+    skills: await loadSkills(dir),
   };
 }
 

@@ -44,6 +44,7 @@ function makeAgent(alias: string, overrides: Partial<AgentConfig> = {}): AgentCo
       routine: '# Routine',
       memory: '# Memory',
       protocols: '',
+      skills: '',
     },
     ...overrides,
   };
