@@ -1,7 +1,0 @@
-{
-  "name": "Product Manager",
-  "model": "claude-opus-4-6",
-  "emoji": "📐",
-  "mcp": ["playwright"],
-  "skills": ["hive-comms"]
-}

@@ -24,7 +24,7 @@ export interface ProvisionInput {
 
 export interface ProvisionResult {
   person: Person;
-  folder: string;            // e.g., "5-product-analyst"
+  folder: string;            // e.g., "5-alice"
   dir: string;               // absolute path to agent folder
 }
 

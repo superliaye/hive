@@ -18,7 +18,7 @@ If any of these are missing, DM CEO with specific clarification questions. Do NO
 
 Templates live in `role-templates/`. Read the template files to understand what each role provides.
 
-Available: `chief-executive`, `agent-resources`, `department-head`, `software-engineer`, `qa-engineer`, `designer`, `product-manager`, `product-analyst`
+Available: `chief-executive`, `agent-resources`, `department-head`, `software-engineer`, `qa-engineer`, `designer`, `product`
 
 ## Creating an Agent
 

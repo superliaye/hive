@@ -379,12 +379,12 @@ describe('hive agent create — full org scaling', () => {
       '--reports-to', 'eng-lead',
     ]);
 
-    // 5. Create product analyst reporting to CEO
+    // 5. Create product person reporting to CEO
     runCli([
       'agent', 'create',
       '--alias', 'pa-1',
       '--name', 'Product Analyst 1',
-      '--template', 'product-analyst',
+      '--template', 'product',
       '--reports-to', 'ceo',
     ]);
 
