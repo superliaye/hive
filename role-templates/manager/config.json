@@ -1,0 +1,7 @@
+{
+  "name": "Manager",
+  "model": "claude-opus-4-6",
+  "emoji": "📋",
+  "skills": ["hive-comms", "retro"],
+  "_note": "name and title are customized on instantiation based on position in org"
+}

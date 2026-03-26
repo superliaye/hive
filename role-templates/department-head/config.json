@@ -1,9 +1,0 @@
-{
-  "name": "[Department] Lead",
-  "role": "Vice President of [Department]",
-  "model": "claude-opus-4-6",
-  "emoji": "📋",
-  "mcp": ["playwright"],
-  "skills": ["hive-comms"],
-  "_note": "name, role, and emoji are customized on instantiation based on department"
-}

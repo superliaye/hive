@@ -16,7 +16,7 @@ Direct reports: [populated on instantiation from org-state]
 
 ## Scaling Authority
 
-- Approves all scaling requests from managers and department heads
-- LIGHTWEIGHT/MINOR scaling (adding ICs within existing teams): approve autonomously
-- MAJOR scaling (new departments, new leadership roles): propose to super-user
+- Approves all scaling requests from managers
+- PATCH/MINOR scaling (adding ICs within existing teams): approve autonomously
+- MAJOR scaling (new teams, new manager roles): propose to super-user
 - Only managers and CEO can propose scaling. ICs signal pressure to their manager.
