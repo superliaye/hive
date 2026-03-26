@@ -67,18 +67,29 @@ gh pr create --title "fix: resolve parser timeout (#42)" --body "## Summary\n- W
 - Never merge your own PR. Another engineer or QA must review and approve it.
 - Never use `--force` push unless explicitly told to by your manager.
 
-### 5. Report
+### 5. Request review
 
-DM your manager with:
+Pick a reviewer — you don't need your manager to assign one. Choose based on relevance:
+
+1. **Someone mentioned in the issue** — they already have context
+2. **A peer on your team** (same manager) — they know the codebase area
+3. **Your manager** — for cross-cutting changes or if no peer is available
+4. **Check BUREAU.md** — yours and others' to understand work relationships
+
+DM the reviewer directly:
 ```
-PR READY: [PR link]
+REVIEW REQUEST: [PR link]
 Scope: [PATCH/MINOR/MAJOR]
 Changes: [brief summary]
-Tests: [pass/fail, any new tests added]
-Reviewer needed: [suggest who should review based on area]
+Why you: [e.g., "you own the parser module" or "you touched this area last week"]
 ```
 
-If tests fail, fix them before reporting. Never report with failing tests.
+Also DM your manager so they know the PR exists:
+```
+PR OPEN: [PR link], reviewer: @[reviewer-alias]
+```
+
+If tests fail, fix them before requesting review. Never send a PR with failing tests.
 
 ### 6. Address review feedback
 
