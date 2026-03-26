@@ -384,7 +384,7 @@ describe('hive agent create — full org scaling', () => {
       'agent', 'create',
       '--alias', 'pa-1',
       '--name', 'Product Analyst 1',
-      '--template', 'product',
+      '--template', 'product-manager',
       '--reports-to', 'ceo',
     ]);
 
