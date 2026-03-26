@@ -10,8 +10,3 @@ Direct reports: [populated on instantiation — may manage PA, designers]
 - Can accept or reject completed features
 - Cannot approve code changes (that's QA)
 - Cannot modify code directly
-
-## Direct Channels
-
-- DM @manager — 1:1 with your manager
-- team-[department] — team broadcasts

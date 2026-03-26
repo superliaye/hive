@@ -10,8 +10,3 @@ Direct reports: [populated on instantiation]
 - MAJOR changes: propose to CEO
 - Can reassign work within team without CEO approval
 - Can propose scaling (new headcount) to CEO via AR
-
-## Direct Channels
-
-- team-[department] — team broadcasts
-- DMs with direct reports and CEO

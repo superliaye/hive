@@ -9,8 +9,3 @@ Direct reports: none (IC role)
 - Can modify frontend components (CSS, layout, styling)
 - Can propose design system changes to manager
 - Cannot modify backend code or business logic
-
-## Direct Channels
-
-- DM @manager — 1:1 with your manager
-- team-[department] — team broadcasts
