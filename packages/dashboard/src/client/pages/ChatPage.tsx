@@ -3,11 +3,12 @@ import { ChatFeed } from '../components/chat/ChatFeed';
 import { ChatInput } from '../components/chat/ChatInput';
 import { useApi } from '../hooks/useApi';
 import { useSSEEvent } from '../hooks/useSSE';
-import type { Message } from '../types';
+import type { Message, OrgMeta } from '../types';
 
 export function ChatPage() {
+  const { data: meta } = useApi<OrgMeta>('/api/org/meta');
   const { data: messages, setData } = useApi<Message[]>('/api/channels/board/messages?limit=100');
-  const [ceoWorking, setCeoWorking] = useState(false);
+  const [rootWorking, setRootWorking] = useState(false);
   const [sending, setSending] = useState(false);
 
   useSSEEvent('new-message', useCallback((event: any) => {
@@ -26,12 +27,14 @@ export function ChatPage() {
     }
   }, [setData]));
 
-  // Track CEO working status via agent-state SSE events (set by daemon)
+  // Track root agent (CEO) working status via agent-state SSE events
   useSSEEvent('agent-state', useCallback((event: any) => {
-    if (event.agentId === 'ceo') {
-      setCeoWorking(event.status === 'working');
+    if (meta?.rootAlias && event.agentId === meta.rootAlias) {
+      setRootWorking(event.status === 'working');
     }
-  }, []));
+  }, [meta?.rootAlias]));
+
+  const rootName = meta?.rootName ?? 'CEO';
 
   const sendMessage = async (text: string) => {
     setSending(true);
@@ -49,11 +52,11 @@ export function ChatPage() {
   return (
     <div className="flex flex-col h-full -m-3 md:-m-6">
       <div className="border-b border-slate-800 px-4 md:px-6 py-3 shrink-0">
-        <h2 className="text-lg font-medium text-slate-200">CEO Chat</h2>
+        <h2 className="text-lg font-medium text-slate-200">{rootName} Chat</h2>
         <p className="text-xs text-slate-500 font-mono">#board</p>
       </div>
-      <ChatFeed messages={messages ?? []} ceoWorking={ceoWorking} />
-      <ChatInput onSend={sendMessage} disabled={sending} />
+      <ChatFeed messages={messages ?? []} rootWorking={rootWorking} rootName={rootName} />
+      <ChatInput onSend={sendMessage} disabled={sending} rootName={rootName} />
     </div>
   );
 }

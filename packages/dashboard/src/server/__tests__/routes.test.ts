@@ -76,17 +76,19 @@ describe('Dashboard API routes', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('GET /api/org returns org chart', async () => {
+  it('GET /api/org returns org chart with tree structure', async () => {
     const { status, body } = await request('/api/org');
     expect(status).toBe(200);
     expect(body).toHaveProperty('agents');
-    expect(body).toHaveProperty('people');
+    expect(body).toHaveProperty('root');
+    expect(body).toHaveProperty('channels');
     expect(Array.isArray(body.agents)).toBe(true);
     expect(body.agents.length).toBeGreaterThan(0);
-    // New flat model: agents have alias, reportsTo, directReports
-    expect(body.agents[0]).toHaveProperty('alias');
-    expect(body.agents[0]).toHaveProperty('reportsTo');
-    expect(body.agents[0]).toHaveProperty('directReports');
+    // Tree model: agents have id (alias), depth, parentId, childIds
+    expect(body.agents[0]).toHaveProperty('id');
+    expect(body.agents[0]).toHaveProperty('depth');
+    expect(body.agents[0]).toHaveProperty('parentId');
+    expect(body.agents[0]).toHaveProperty('childIds');
   });
 
   it('GET /api/agents returns all agents with status', async () => {
@@ -94,7 +96,7 @@ describe('Dashboard API routes', () => {
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
-    expect(body[0]).toHaveProperty('alias');
+    expect(body[0]).toHaveProperty('id');
     expect(body[0]).toHaveProperty('status');
   });
 

@@ -3,9 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 interface ChatInputProps {
   onSend: (text: string) => void;
   disabled: boolean;
+  rootName?: string;
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, rootName = 'CEO' }: ChatInputProps) {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -31,7 +32,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message to CEO..."
+          placeholder={`Type a message to ${rootName}...`}
           rows={1}
           className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:border-amber-500 transition-colors"
         />

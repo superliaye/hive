@@ -5,22 +5,54 @@ import { readAgentFiles } from '../../../../../src/org/parser.js';
 export function createOrgRoutes(ctx: HiveContext): Router {
   const router = Router();
 
-  // GET /api/org — full org chart
+  // GET /api/org — full org chart with tree structure for OrgTree component
   router.get('/', (_req, res) => {
     const { orgChart } = ctx;
-    const agents = Array.from(orgChart.agents.values()).map(a => ({
-      alias: a.person.alias,
-      id: a.person.id,
-      name: a.person.name,
+    const agentList = Array.from(orgChart.agents.values());
+
+    // Build depth map via BFS from roots
+    const depthMap = new Map<string, number>();
+    const roots = agentList.filter(a => !a.reportsTo);
+    const queue = roots.map(a => ({ alias: a.person.alias, depth: 0 }));
+    while (queue.length > 0) {
+      const { alias, depth } = queue.shift()!;
+      depthMap.set(alias, depth);
+      const agent = orgChart.agents.get(alias);
+      if (agent) {
+        for (const report of agent.directReports) {
+          queue.push({ alias: report.alias, depth: depth + 1 });
+        }
+      }
+    }
+
+    const agents = agentList.map(a => ({
+      id: a.person.alias,
+      name: a.identity.name,
       role: a.identity.role,
       emoji: a.identity.emoji,
       model: a.identity.model,
-      reportsTo: a.reportsTo?.alias ?? null,
-      directReports: a.directReports.map(p => p.alias),
+      depth: depthMap.get(a.person.alias) ?? 0,
+      parentId: a.reportsTo?.alias ?? null,
+      childIds: a.directReports.map(p => p.alias),
     }));
+
+    const root = roots[0]?.person.alias ?? null;
+
     res.json({
+      root,
       agents,
-      people: orgChart.people,
+      channels: [],
+    });
+  });
+
+  // GET /api/org/meta — org metadata (root agent alias and name)
+  router.get('/meta', (_req, res) => {
+    const agentList = Array.from(ctx.orgChart.agents.values());
+    const root = agentList.find(a => !a.reportsTo);
+    res.json({
+      rootAlias: root?.person.alias ?? null,
+      rootName: root?.identity.name ?? 'CEO',
+      boardChannel: 'board',
     });
   });
 
@@ -36,9 +68,8 @@ export function createAgentRoutes(ctx: HiveContext): Router {
     const agents = Array.from(ctx.orgChart.agents.values()).map(a => {
       const state = states.find(s => s.agentId === a.person.alias);
       return {
-        alias: a.person.alias,
-        id: a.person.id,
-        name: a.person.name,
+        id: a.person.alias,
+        name: a.identity.name,
         role: a.identity.role,
         emoji: a.identity.emoji,
         model: a.identity.model,

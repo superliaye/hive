@@ -2,9 +2,10 @@ import { useState, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { DashboardCard, timeAgo } from '../shared';
-import type { Message } from '../../types';
+import type { Message, OrgMeta } from '../../types';
 
 export function RecentChatCard() {
+  const { data: meta } = useApi<OrgMeta>('/api/org/meta');
   const { data: messages, setData } = useApi<Message[]>('/api/channels/board/messages?limit=5');
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -36,8 +37,10 @@ export function RecentChatCard() {
     }
   };
 
+  const rootName = meta?.rootName ?? 'CEO';
+
   return (
-    <DashboardCard title="CEO Chat (#board)" icon={'\u25C9'} linkTo="/chat">
+    <DashboardCard title={`${rootName} Chat (#board)`} icon={'\u25C9'} linkTo="/chat">
       <div className="space-y-2 mb-3">
         {messages && messages.length > 0 ? (
           messages.slice(-3).map(m => (
@@ -57,7 +60,7 @@ export function RecentChatCard() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send()}
-          placeholder="Message CEO..."
+          placeholder={`Message ${rootName}...`}
           className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
         />
         <button
