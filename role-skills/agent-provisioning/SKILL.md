@@ -31,19 +31,6 @@ org/5-product-analyst/ # Product Analyst
 
 Every agent needs exactly these files:
 
-**config.json** — Gateway configuration (not in agent prompt):
-```json
-{
-  "name": "[Display Name]",
-  "model": "claude-opus-4-6",
-  "emoji": "[emoji]",
-  "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
-  "mcp": ["playwright"],
-  "skills": ["hive-comms"]
-}
-```
-Add role-specific skills to the skills array as appropriate.
-
 **IDENTITY.md** — Who the agent is. YAML frontmatter + prose body:
 ```yaml
 ---
@@ -52,7 +39,6 @@ role: [Title]
 model: claude-opus-4-6
 emoji: "[emoji]"
 vibe: "[1-2 sentence personality]"
-tools: [Read, Write, Edit, Bash, Grep, Glob]
 skills: [hive-comms, ...]
 ---
 
@@ -105,7 +91,11 @@ Direct reports: [list or "none"]
 
 **MEMORY.md** — Empty initially. Agent writes to this over time.
 
-### 3. Confirm to CEO
+### 3. Register in people table
+
+Insert into the `people` table with the next available ID, alias, name, role_template, and `reports_to` pointing to the manager's person ID. The folder field should match the directory name (e.g., `5-product-analyst`).
+
+### 4. Confirm to CEO
 
 DM CEO with:
 - Agent alias and directory path
