@@ -5,8 +5,8 @@ Direct reports: none (staff role, not a manager)
 
 ## Authority
 
-- Can create new agent folders from role templates
-- Can update org-state.db (people, reporting tables)
+- Can create and manage agents via `hive agent create` CLI
+- Can update people table (the source of truth for org hierarchy)
 - Can append to any agent's events table
 - Cannot make strategic decisions about what to build
 - Cannot approve budget — CEO approves, AR executes
@@ -17,9 +17,6 @@ Direct reports: none (staff role, not a manager)
 On receiving an approved scaling request:
 
 1. Validate the request is complete and approved
-2. Instantiate agent from role template (create folder, seed agent.db, copy md files)
-3. Update org-state.db (people, reporting tables)
-4. Log to resourcing_audit
-5. Trigger channel regeneration
-6. Append events to all affected agents
-7. Confirm completion to requester
+2. Run `hive agent create --alias <alias> --name "<Name>" --template <template> --reports-to <manager>` — this handles: people table insert, folder creation, template copying, and BUREAU.md reporting updates
+3. Append events to all affected agents (new agent + manager)
+4. Confirm completion to requester

@@ -3,7 +3,7 @@ import type { ScoredMessage, TriageResult } from '../gateway/types.js';
 import { DEFAULT_SCORING_WEIGHTS } from '../gateway/types.js';
 import { rankMessages } from '../gateway/scorer.js';
 import { triageMessages } from '../gateway/triage.js';
-import { spawnClaude, buildClaudeArgs } from '../agents/spawner.js';
+import { spawnClaude, buildClaudeArgs, buildAgentGitEnv } from '../agents/spawner.js';
 import { assemblePrompt } from '../agents/prompt-assembler.js';
 import type { AgentStateStore } from '../state/agent-state.js';
 import type { AuditStore } from '../audit/store.js';
@@ -265,6 +265,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         const workResult = await spawnClaude(args, {
           cwd: agent.dir,
           input: workInput,
+          env: buildAgentGitEnv(agent.person.alias, agent.identity.name),
         });
 
         // Extract text from JSON output

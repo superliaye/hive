@@ -11,6 +11,12 @@ vi.mock('../../src/agents/spawner.js', () => ({
   spawnClaude: vi.fn(),
   buildClaudeArgs: vi.fn(() => ['--mock']),
   buildTriageArgs: vi.fn(() => ['--mock-triage']),
+  buildAgentGitEnv: vi.fn(() => ({
+    GIT_AUTHOR_NAME: 'Test Agent (hive/test)',
+    GIT_AUTHOR_EMAIL: 'test@hive.local',
+    GIT_COMMITTER_NAME: 'Test Agent (hive/test)',
+    GIT_COMMITTER_EMAIL: 'test@hive.local',
+  })),
 }));
 
 vi.mock('../../src/gateway/triage.js', () => ({

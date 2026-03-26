@@ -17,6 +17,20 @@ export function buildClaudeArgs(opts: ClaudeArgs): string[] {
   return args;
 }
 
+/**
+ * Build git environment variables for an agent.
+ * Sets author AND committer so all git operations (commit, rebase, cherry-pick)
+ * are attributed to the agent. Push still uses the shared GitHub credentials.
+ */
+export function buildAgentGitEnv(alias: string, name: string): Record<string, string> {
+  return {
+    GIT_AUTHOR_NAME: `${name} (hive/${alias})`,
+    GIT_AUTHOR_EMAIL: `${alias}@hive.local`,
+    GIT_COMMITTER_NAME: `${name} (hive/${alias})`,
+    GIT_COMMITTER_EMAIL: `${alias}@hive.local`,
+  };
+}
+
 export function buildTriageArgs(triagePrompt: string): string[] {
   return buildClaudeArgs({
     model: 'haiku',
@@ -27,13 +41,13 @@ export function buildTriageArgs(triagePrompt: string): string[] {
 
 export async function spawnClaude(
   args: string[],
-  opts: { cwd: string; input?: string; timeoutMs?: number },
+  opts: { cwd: string; input?: string; timeoutMs?: number; env?: Record<string, string> },
 ): Promise<SpawnResult> {
   const start = Date.now();
 
   return new Promise((resolve, reject) => {
     // Unset CLAUDECODE to allow spawning Claude CLI from within a Claude Code session
-    const env = { ...process.env };
+    const env = { ...process.env, ...opts.env };
     delete env.CLAUDECODE;
 
     const proc = nodeSpawn('claude', args, {
