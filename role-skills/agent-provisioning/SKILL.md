@@ -48,7 +48,7 @@ After creation, customize any files that need agent-specific content beyond the 
 
 ```bash
 hive agent create \
-  --alias eng-1 \
+  --alias alice \
   --name "Alice Park" \
   --template software-engineer \
   --reports-to ceo \

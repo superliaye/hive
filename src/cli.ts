@@ -125,8 +125,8 @@ const agent = program.command('agent').description('Manage agents');
 agent
   .command('create')
   .description('Create a new agent from a role template')
-  .requiredOption('--alias <alias>', 'Unique alias (e.g., "platform-eng")')
-  .requiredOption('--name <name>', 'Display name (e.g., "Platform Engineer")')
+  .requiredOption('--alias <alias>', 'Unique alias (e.g., "alice")')
+  .requiredOption('--name <name>', 'Display name (e.g., "Alice Park")')
   .requiredOption('--template <template>', 'Role template (e.g., "software-engineer")')
   .requiredOption('--reports-to <alias>', 'Manager alias (e.g., "ceo")')
   .option('--vibe <vibe>', 'Personality vibe (1-2 sentences)')

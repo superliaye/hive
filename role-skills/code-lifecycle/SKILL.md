@@ -25,7 +25,7 @@ If the fix turns out bigger than expected, **stop and re-classify** before conti
 Check inbox for tasks from manager. Check GitHub issues assigned to you:
 ```bash
 gh issue list --label "assigned:{your-alias}" --state open
-# e.g., gh issue list --label "assigned:eng-1" --state open
+# e.g., gh issue list --label "assigned:alice" --state open
 ```
 
 ### 2. Classify scope
@@ -39,7 +39,7 @@ For MAJOR+: DM your manager with a plan before implementing.
 **Branching** — always work on a branch, never commit directly to main:
 ```bash
 git checkout -b {your-alias}/{issue-number}-{short-desc}
-# e.g., eng-1/42-fix-parser-timeout
+# e.g., alice/42-fix-parser-timeout
 ```
 
 **Commits** — your git identity is set automatically by the system. Just commit normally:
@@ -47,7 +47,7 @@ git checkout -b {your-alias}/{issue-number}-{short-desc}
 git add <files>
 git commit -m "fix: resolve parser timeout on large orgs (#42)"
 ```
-Your commits will be attributed to your agent name (e.g., `Alice Park (hive/eng-1)`). Do NOT change `git config user.name` or `user.email` — the system handles this.
+Your commits will be attributed to your agent name (e.g., `Alice Park (hive/alice)`). Do NOT change `git config user.name` or `user.email` — the system handles this.
 
 **Tests** — run before every commit:
 ```bash

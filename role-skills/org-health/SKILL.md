@@ -28,10 +28,10 @@ description: Use when observing agent workload imbalances, persistent blockers, 
 Read each agent's PRIORITIES.md and recent memory logs:
 ```bash
 # Check an agent's priorities (folder is {id}-{alias})
-cat org/3-eng-1/PRIORITIES.md
+cat org/3-alice/PRIORITIES.md
 
 # Check recent activity
-cat org/3-eng-1/memory/$(date +%Y-%m-%d).md
+cat org/3-alice/memory/$(date +%Y-%m-%d).md
 ```
 
 ## Scaling Recommendations
