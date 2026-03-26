@@ -3,9 +3,9 @@
 Reports to: super-user
 Direct reports: [populated on instantiation from org-state]
 
-## Team
+## Agent colleagues
 
-[populated on instantiation — direct reports and key staff]
+<!-- Maintain this yourself as you work with others. Note who they are, what they're good at, and how to work with them. -->
 
 ## Authority
 

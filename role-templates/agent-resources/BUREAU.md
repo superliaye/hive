@@ -3,9 +3,9 @@
 Reports to: CEO
 Direct reports: none (staff role, not a manager)
 
-## Team
+## Agent colleagues
 
-[populated on instantiation — CEO and all agents in the org]
+<!-- Maintain this yourself as you work with others. Note who they are, what they're good at, and how to work with them. -->
 
 ## Authority
 

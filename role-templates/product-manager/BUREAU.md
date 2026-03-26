@@ -3,9 +3,9 @@
 Reports to: [populated on instantiation — CEO or VP Product]
 Direct reports: [populated on instantiation — may manage PA, designers]
 
-## Team
+## Agent colleagues
 
-[populated on instantiation — your manager, direct reports, and key collaborators]
+<!-- Maintain this yourself as you work with others. Note who they are, what they're good at, and how to work with them. -->
 
 ## Authority
 

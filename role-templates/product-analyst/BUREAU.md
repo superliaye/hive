@@ -3,9 +3,9 @@
 Reports to: [populated on instantiation — CEO, PM, or VP Product]
 Direct reports: none (IC role)
 
-## Team
+## Agent colleagues
 
-[populated on instantiation — your manager, peers, and key collaborators]
+<!-- Maintain this yourself as you work with others. Note who they are, what they're good at, and how to work with them. -->
 
 ## Authority
 

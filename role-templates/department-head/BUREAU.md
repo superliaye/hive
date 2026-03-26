@@ -3,9 +3,9 @@
 Reports to: CEO
 Direct reports: [populated on instantiation]
 
-## Team
+## Agent colleagues
 
-[populated on instantiation — your manager, direct reports, and peer leaders]
+<!-- Maintain this yourself as you work with others. Note who they are, what they're good at, and how to work with them. -->
 
 ## Authority
 
