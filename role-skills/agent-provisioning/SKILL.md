@@ -27,20 +27,20 @@ Read the template files before creating an agent — they define the structure a
 
 ## Creating an Agent
 
-### 1. Pick template and create directory
+### 1. Register in people table
 
-Choose the closest role template. Create a flat directory under `org/` named `{id}-{alias}/` where id is the next available integer.
+Insert into the `people` table first — this is the source of truth. Use the next available ID, alias, name, role_template, and `reports_to` pointing to the manager's person ID. The folder field should be `{id}-{alias}` (e.g., `5-product-analyst`).
 
-### 2. Copy and customize template files
+### 2. Pick template and create directory
+
+Choose the closest role template. Create a flat directory under `org/` named `{id}-{alias}/` matching the folder in the people table.
+
+### 3. Copy and customize template files
 
 Copy all files from the role template into the new directory. Customize:
 - **IDENTITY.md** frontmatter: name, vibe, skills for this specific agent
 - **BUREAU.md**: reports-to, direct reports, authority scope
 - **PRIORITIES.md**: initial work items from CEO's request
-
-### 3. Register in people table
-
-Insert into the `people` table with the next available ID, alias, name, role_template, and `reports_to` pointing to the manager's person ID. The folder field should match the directory name (e.g., `5-product-analyst`).
 
 ### 4. Confirm to CEO
 
