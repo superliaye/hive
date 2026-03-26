@@ -14,82 +14,29 @@ Every provisioning request from CEO must include:
 
 If any of these are missing, DM CEO with specific clarification questions. Do NOT guess or fill in defaults.
 
+## Role Templates
+
+Templates live in `role-templates/`. Each template contains the standard agent files (IDENTITY.md, SOUL.md, BUREAU.md, PRIORITIES.md, MEMORY.md) with role-appropriate defaults.
+
+Available templates:
+- `chief-executive`, `agent-resources`, `department-head`
+- `software-engineer`, `qa-engineer`, `designer`
+- `product-manager`, `product-analyst`
+
+Read the template files before creating an agent — they define the structure and conventions.
+
 ## Creating an Agent
 
-### 1. Determine directory path
+### 1. Pick template and create directory
 
-Agents live in a flat structure under `org/` with `{id}-{alias}/` naming:
-```
-org/1-ceo/            # CEO
-org/2-ar/             # AR
-org/3-platform-eng/   # Platform Engineer
-org/4-qa-eng/         # QA Engineer
-org/5-product-analyst/ # Product Analyst
-```
+Choose the closest role template. Create a flat directory under `org/` named `{id}-{alias}/` where id is the next available integer.
 
-### 2. Create the directory and write all files
+### 2. Copy and customize template files
 
-Every agent needs exactly these files:
-
-**IDENTITY.md** — Who the agent is. YAML frontmatter + prose body:
-```yaml
----
-name: [Role Name]
-role: [Title]
-model: claude-opus-4-6
-emoji: "[emoji]"
-vibe: "[1-2 sentence personality]"
-skills: [hive-comms, ...]
----
-
-[Prose description of identity, responsibilities, and what this agent does NOT do]
-```
-
-**SOUL.md** — Personality, values, decision-making style. Write this based on the role:
-- Engineers: bias toward shipping, testing everything, simplicity
-- QA: default skepticism, evidence over claims
-- Product: user-first thinking, scope discipline
-- Managers: delegation, clarity, focus over throughput
-
-**BUREAU.md** — Org position and relationships:
-```markdown
-## Reporting
-Reports to: @[manager-alias]
-Direct reports: [list or "none"]
-
-## Authority
-[What they can decide autonomously vs. what needs escalation]
-
-## Collaborators
-[Who they work with regularly outside reporting chain]
-```
-
-**PRIORITIES.md** — Initial work items. Start with onboarding:
-```markdown
-## ACTIVE
-- Introduce yourself to manager via DM
-- Review codebase and document findings
-
-## READY
-[Tasks CEO mentioned in the request]
-
-## BLOCKED
-[none]
-
-## DONE
-[none]
-```
-
-**ROUTINE.md** — On-invocation behavior:
-```markdown
-## On Invocation
-1. Process all inbound messages
-2. Check PRIORITIES.md for ACTIVE items
-3. [Role-specific standing orders]
-4. Update PRIORITIES.md if work changes
-```
-
-**MEMORY.md** — Empty initially. Agent writes to this over time.
+Copy all files from the role template into the new directory. Customize:
+- **IDENTITY.md** frontmatter: name, vibe, skills for this specific agent
+- **BUREAU.md**: reports-to, direct reports, authority scope
+- **PRIORITIES.md**: initial work items from CEO's request
 
 ### 3. Register in people table
 
@@ -97,12 +44,7 @@ Insert into the `people` table with the next available ID, alias, name, role_tem
 
 ### 4. Confirm to CEO
 
-DM CEO with:
-- Agent alias and directory path
-- Role summary
-- Reporting relationship
-- Initial priorities
-- Any skills assigned
+DM CEO with the agent alias, role summary, reporting relationship, and initial priorities.
 
 ## Modifying an Agent
 
@@ -110,13 +52,13 @@ Read the agent's current files before making changes. Only modify what CEO reque
 
 ## Archiving an Agent
 
-Move the agent directory to `.archive/` under its parent. DM CEO confirming the archive.
+Move the agent directory to `.archive/`. DM CEO confirming the archive.
 
 ## Quality Gates
 
 Before creating any agent, verify:
 - [ ] Role doesn't duplicate an existing agent's responsibilities
-- [ ] Reporting chain is valid (manager exists)
+- [ ] Reporting chain is valid (manager exists in people table)
 - [ ] At least one concrete priority beyond "introduce yourself"
 - [ ] Skills array includes `hive-comms`
 - [ ] Model is `claude-opus-4-6` unless CEO specifies otherwise
