@@ -3,6 +3,10 @@
 Reports to: CEO
 Direct reports: none (staff role, not a manager)
 
+## Team
+
+[populated on instantiation — CEO and all agents in the org]
+
 ## Authority
 
 - Can create and manage agents via `hive agent create` CLI

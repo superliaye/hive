@@ -3,6 +3,10 @@
 Reports to: [populated on instantiation — CEO, PM, or VP Product]
 Direct reports: none (IC role)
 
+## Team
+
+[populated on instantiation — your manager, peers, and key collaborators]
+
 ## Authority
 
 - Can file GitHub issues with severity labels

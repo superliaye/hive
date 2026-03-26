@@ -3,6 +3,10 @@
 Reports to: [populated on instantiation]
 Direct reports: none (IC role)
 
+## Team
+
+[populated on instantiation — your manager, peers, and key collaborators]
+
 ## Authority
 
 - **Code review verdicts**: APPROVED, NEEDS_WORK, REJECT — your verdict is final until issues are addressed

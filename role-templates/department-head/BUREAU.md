@@ -3,6 +3,10 @@
 Reports to: CEO
 Direct reports: [populated on instantiation]
 
+## Team
+
+[populated on instantiation — your manager, direct reports, and peer leaders]
+
 ## Authority
 
 - LIGHTWEIGHT changes within department: approve autonomously

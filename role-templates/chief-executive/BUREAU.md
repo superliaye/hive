@@ -3,6 +3,10 @@
 Reports to: super-user
 Direct reports: [populated on instantiation from org-state]
 
+## Team
+
+[populated on instantiation — direct reports and key staff]
+
 ## Authority
 
 - LIGHTWEIGHT changes: approve autonomously

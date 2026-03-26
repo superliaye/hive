@@ -3,6 +3,10 @@
 Reports to: [populated on instantiation]
 Direct reports: none (IC role)
 
+## Team
+
+[populated on instantiation — your manager, peers, and key collaborators]
+
 ## Authority
 
 - **Own domain**: implement, refactor, and ship within your area autonomously

@@ -169,9 +169,49 @@ export function provision(
       : 'Direct reports: none'
   );
 
+  // Build Team section from org relationships
+  const peers = db.prepare(
+    'SELECT alias, name, role_template FROM people WHERE reports_to = ? AND status = ? AND id != ?'
+  ).all(manager.id, 'active', personId) as { alias: string; name: string; role_template: string }[];
+
+  const teamLines: string[] = [];
+  teamLines.push(`- **@${manager.alias}** (${manager.name}) — your manager`);
+  for (const peer of peers) {
+    teamLines.push(`- **@${peer.alias}** (${peer.name}) — ${peer.role_template ?? 'peer'}`);
+  }
+
+  bureau = bureau.replace(
+    /\[populated on instantiation.*?\]/,
+    teamLines.join('\n')
+  );
+
   fs.writeFileSync(bureauPath, bureau);
 
-  // 5. Update manager's BUREAU.md to include new direct report
+  // 5. Update peers' BUREAU.md to include new teammate
+  for (const peer of peers) {
+    const peerFolder = db.prepare('SELECT folder FROM people WHERE alias = ?').get(peer.alias) as { folder: string } | undefined;
+    if (peerFolder?.folder) {
+      const peerBureauPath = path.join(orgDir, peerFolder.folder, 'BUREAU.md');
+      if (fs.existsSync(peerBureauPath)) {
+        let peerBureau = fs.readFileSync(peerBureauPath, 'utf-8');
+        const newLine = `- **@${input.alias}** (${input.name}) — ${input.roleTemplate}`;
+        // Append to Team section: insert before the next ## heading or at end of section
+        const teamMatch = peerBureau.match(/^## Team\n/m);
+        if (teamMatch) {
+          const teamStart = peerBureau.indexOf(teamMatch[0]);
+          const nextSection = peerBureau.indexOf('\n## ', teamStart + 1);
+          if (nextSection > -1) {
+            peerBureau = peerBureau.slice(0, nextSection) + newLine + '\n' + peerBureau.slice(nextSection);
+          } else {
+            peerBureau = peerBureau.trimEnd() + '\n' + newLine + '\n';
+          }
+          fs.writeFileSync(peerBureauPath, peerBureau);
+        }
+      }
+    }
+  }
+
+  // 6. Update manager's BUREAU.md to include new direct report
   const managerFolder = db.prepare('SELECT folder FROM people WHERE id = ?').get(manager.id) as { folder: string } | undefined;
   if (managerFolder?.folder) {
     const managerBureauPath = path.join(orgDir, managerFolder.folder, 'BUREAU.md');
