@@ -22,7 +22,7 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "postinstall": "uipro init --ai claude --offline 2>/dev/null || true"
+    "postinstall": "uipro init --ai claude --offline 2>/dev/null && mv .claude/skills/ui-ux-pro-max role-skills/ui-ux-pro-max 2>/dev/null || true"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
