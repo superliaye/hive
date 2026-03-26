@@ -98,6 +98,7 @@ program
   .description('Bootstrap a new organization')
   .requiredOption('--mission <mission>', 'Organization mission statement')
   .option('--timezone <tz>', 'Organization timezone', 'America/Los_Angeles')
+  .option('--template <name>', 'Org template to use (e.g., "software-startup")')
   .action(async (opts) => {
     const targetDir = process.cwd();
     const orgDir = path.join(targetDir, 'org');
@@ -107,16 +108,48 @@ program
       process.exit(1);
     }
 
-    const result = scaffold({
-      targetDir,
-      mission: opts.mission,
-      timezone: opts.timezone,
-    });
+    if (opts.template) {
+      const { scaffoldFromManifest } = await import('./org/scaffold.js');
 
-    console.log(chalk.green('✔ Organization bootstrapped!\n'));
-    console.log(`  ${chalk.bold('Mission:')} ${opts.mission}`);
-    console.log(`  ${chalk.bold('Agents:')} ${result.agentsCreated.join(', ')}`);
-    console.log(`\n  ${chalk.dim('Next: hive start')}`);
+      try {
+        const result = scaffoldFromManifest({
+          targetDir,
+          mission: opts.mission,
+          timezone: opts.timezone,
+          templateName: opts.template,
+        });
+
+        console.log(chalk.green(`✔ Organization bootstrapped from template "${opts.template}"!\n`));
+        console.log(`  ${chalk.bold('Mission:')} ${opts.mission}`);
+        console.log(`  ${chalk.bold('Agents:')} ${result.agentsCreated.length}`);
+        for (const alias of result.agentsCreated) {
+          console.log(`    - @${alias}`);
+        }
+
+        if (result.warnings.length > 0) {
+          console.log('');
+          for (const w of result.warnings) {
+            console.log(chalk.yellow(`  ⚠ ${w}`));
+          }
+        }
+
+        console.log(`\n  ${chalk.dim('Next: hive start')}`);
+      } catch (err) {
+        console.error(chalk.red(`Failed: ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(1);
+      }
+    } else {
+      const result = scaffold({
+        targetDir,
+        mission: opts.mission,
+        timezone: opts.timezone,
+      });
+
+      console.log(chalk.green('✔ Organization bootstrapped!\n'));
+      console.log(`  ${chalk.bold('Mission:')} ${opts.mission}`);
+      console.log(`  ${chalk.bold('Agents:')} ${result.agentsCreated.join(', ')}`);
+      console.log(`\n  ${chalk.dim('Next: hive start')}`);
+    }
   });
 
 // ── Agent management ──

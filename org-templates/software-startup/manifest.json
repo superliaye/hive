@@ -1,0 +1,80 @@
+{
+  "name": "Software Startup",
+  "description": "Small product team — CEO leads two cross-functional squads, each with a manager, PM, 2 SWEs, and a QA.",
+  "agents": [
+    {
+      "alias": "hiro",
+      "name": "Hiro Tanaka",
+      "role": "chief-executive",
+      "reports_to": "super-user"
+    },
+    {
+      "alias": "zoe",
+      "name": "Zoe Chen",
+      "role": "agent-resources",
+      "reports_to": "hiro"
+    },
+    {
+      "alias": "maya",
+      "name": "Maya Patel",
+      "role": "manager",
+      "reports_to": "hiro",
+      "title": "Engineering Lead"
+    },
+    {
+      "alias": "sam",
+      "name": "Sam Rivera",
+      "role": "manager",
+      "reports_to": "hiro",
+      "title": "Engineering Lead"
+    },
+    {
+      "alias": "jin",
+      "name": "Jin Park",
+      "role": "product-manager",
+      "reports_to": "maya"
+    },
+    {
+      "alias": "jules",
+      "name": "Jules Moreau",
+      "role": "product-manager",
+      "reports_to": "sam"
+    },
+    {
+      "alias": "kai",
+      "name": "Kai Nakamura",
+      "role": "software-engineer",
+      "reports_to": "maya"
+    },
+    {
+      "alias": "lena",
+      "name": "Lena Kowalski",
+      "role": "software-engineer",
+      "reports_to": "maya"
+    },
+    {
+      "alias": "ava",
+      "name": "Ava Thompson",
+      "role": "qa-engineer",
+      "reports_to": "maya"
+    },
+    {
+      "alias": "rio",
+      "name": "Rio Santos",
+      "role": "software-engineer",
+      "reports_to": "sam"
+    },
+    {
+      "alias": "noor",
+      "name": "Noor Ali",
+      "role": "software-engineer",
+      "reports_to": "sam"
+    },
+    {
+      "alias": "tess",
+      "name": "Tess Bergman",
+      "role": "qa-engineer",
+      "reports_to": "sam"
+    }
+  ]
+}
