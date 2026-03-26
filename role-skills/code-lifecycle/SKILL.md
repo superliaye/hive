@@ -22,9 +22,10 @@ If the fix turns out bigger than expected, **stop and re-classify** before conti
 
 ### 1. Pick up work
 
-Check inbox for tasks from manager. Check GitHub issues:
+Check inbox for tasks from manager. Check GitHub issues assigned to you:
 ```bash
-gh issue list --assignee @me --state open
+gh issue list --label "assigned:{your-alias}" --state open
+# e.g., gh issue list --label "assigned:eng-1" --state open
 ```
 
 ### 2. Classify scope
@@ -38,7 +39,7 @@ For MAJOR+: DM your manager with a plan before implementing.
 **Branching** — always work on a branch, never commit directly to main:
 ```bash
 git checkout -b {your-alias}/{issue-number}-{short-desc}
-# e.g., platform-eng/42-fix-parser-timeout
+# e.g., eng-1/42-fix-parser-timeout
 ```
 
 **Commits** — your git identity is set automatically by the system. Just commit normally:
@@ -46,7 +47,7 @@ git checkout -b {your-alias}/{issue-number}-{short-desc}
 git add <files>
 git commit -m "fix: resolve parser timeout on large orgs (#42)"
 ```
-Your commits will be attributed to your agent name (e.g., `Platform Engineer (hive/platform-eng)`). Do NOT change `git config user.name` or `user.email` — the system handles this.
+Your commits will be attributed to your agent name (e.g., `Alice Park (hive/eng-1)`). Do NOT change `git config user.name` or `user.email` — the system handles this.
 
 **Tests** — run before every commit:
 ```bash
@@ -130,16 +131,26 @@ gh pr merge <number> --squash --delete-branch
 
 ## GitHub Issue Management
 
+All agents share one GitHub account. Use labels to track ownership — never `--assignee`.
+
 ```bash
+# Claim an issue (adds your label so others know it's taken)
+gh issue edit <number> --add-label "assigned:{your-alias}"
+
 # List your open issues
-gh issue list --assignee @me --state open
+gh issue list --label "assigned:{your-alias}" --state open
 
 # Comment on progress
 gh issue comment <number> --body "Fix in progress, scope: MINOR"
 
+# Release an issue (if you can't finish it)
+gh issue edit <number> --remove-label "assigned:{your-alias}"
+
 # Close when verified
-gh issue close <number> --comment "Verified by @qa-eng"
+gh issue close <number> --comment "Verified by {reviewer-alias}"
 ```
+
+Before claiming an issue, check if it already has an `assigned:*` label — if so, it's taken.
 
 ## Red Flags — Stop and Escalate
 

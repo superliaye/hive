@@ -38,7 +38,7 @@ Recent logs carry more weight than old ones (temporal decay), but nothing is los
 Write to MEMORY.md when you learn something you'll need again:
 
 - A decision and why it was made ("Chose X over Y because Z")
-- Something about how a collaborator works ("platform-eng prefers explicit specs, doesn't like ambiguity")
+- Something about how a collaborator works ("eng-1 prefers explicit specs, doesn't like ambiguity")
 - A fact about the system you're working on ("Dashboard port is 3001, auth tokens expire after 24h")
 - A pattern you discovered ("When QA rejects, it's usually missing edge case tests")
 - Context from a 1:1 that changes how you should work going forward

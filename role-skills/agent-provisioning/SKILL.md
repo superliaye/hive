@@ -48,8 +48,8 @@ After creation, customize any files that need agent-specific content beyond the 
 
 ```bash
 hive agent create \
-  --alias platform-eng \
-  --name "Platform Engineer" \
+  --alias eng-1 \
+  --name "Alice Park" \
   --template software-engineer \
   --reports-to ceo \
   --vibe "Ships solid infrastructure. Hates over-engineering."
