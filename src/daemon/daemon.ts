@@ -5,6 +5,8 @@ import { DirectChannelRegistry, parseBureauDirectChannels } from './direct-chann
 import { checkWork, type CheckWorkContext } from './check-work.js';
 import { PidFile } from '../orchestrator/pid-file.js';
 import { recoverStaleAgents, formatRecoveryAlert } from '../orchestrator/crash-recovery.js';
+import { parseOrgFlat } from '../org/parser.js';
+import { detectNewAgents } from './hot-reload.js';
 
 const CRASH_MAX_COUNT = 3;
 const CRASH_WINDOW_MS = 10 * 60 * 1000;
@@ -57,6 +59,11 @@ export class Daemon {
       }
     }
 
+    // Index agent memories in background (non-blocking)
+    this.config.memory.indexAll(this.config.orgChart.agents, msg => console.log(`[daemon] ${msg}`))
+      .then(() => console.log('[daemon] memory indexing complete'))
+      .catch(err => console.error('[daemon] memory indexing error:', err));
+
     // Register direct channels from BUREAU.md
     for (const [id, agent] of this.config.orgChart.agents) {
       const directDefs = parseBureauDirectChannels(agent.files.bureau);
@@ -106,6 +113,59 @@ export class Daemon {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * Re-scan org/ directory and register any new agents.
+   * Called periodically or after AR creates a new agent.
+   */
+  async hotReload(): Promise<{ added: string[]; removed: string[] }> {
+    if (!this.running) return { added: [], removed: [] };
+
+    const people = this.config.loadPeople?.() ?? [];
+    const updatedOrg = await parseOrgFlat(this.config.orgDir, people);
+    const { added, removed } = detectNewAgents(
+      this.config.orgChart.agents,
+      updatedOrg.agents,
+    );
+
+    if (added.length === 0 && removed.length === 0) {
+      return { added, removed };
+    }
+
+    // Register new agents
+    for (const id of added) {
+      const agent = updatedOrg.agents.get(id)!;
+      this.config.orgChart.agents.set(id, agent);
+      this.config.state.register(id);
+
+      const directDefs = parseBureauDirectChannels(agent.files.bureau);
+      if (directDefs.length > 0) {
+        this.directChannels.register(id, directDefs.map(d => d.channel));
+      }
+
+      const tickMs = this.config.tickIntervalMs ?? 600_000;
+      const timer = setInterval(() => {
+        if (!this.running) return;
+        this.enqueueCheckWork(id);
+      }, tickMs);
+      this.tickTimers.set(id, timer);
+
+      console.log(`[daemon] hot-reload: registered new agent ${id}`);
+    }
+
+    // Deregister removed agents
+    for (const id of removed) {
+      this.config.orgChart.agents.delete(id);
+      const timer = this.tickTimers.get(id);
+      if (timer) {
+        clearInterval(timer);
+        this.tickTimers.delete(id);
+      }
+      console.log(`[daemon] hot-reload: deregistered agent ${id}`);
+    }
+
+    return { added, removed };
   }
 
   /**
@@ -160,6 +220,7 @@ export class Daemon {
     const ctx: CheckWorkContext = {
       agent,
       stateStore: this.config.state,
+      audit: this.config.audit,
       orgAgents: this.config.orgChart.agents,
       getUnread: async (agentId) => {
         const messages = await this.config.comms.getUnread(agentId);
@@ -178,14 +239,20 @@ export class Daemon {
       postMessage: async (agentId, channel, content, opts) => {
         await this.config.comms.postMessage(channel, agentId, content, opts);
       },
+      memorySearch: async (agentId, query, limit) => {
+        return this.config.memory.search(agentId, query, limit);
+      },
+      memoryReindex: async (agentId, agentDir) => {
+        await this.config.memory.indexAgent(agentId, agentDir);
+      },
     };
 
     const result = await checkWork(ctx);
 
     if (result.error) {
-      const rateLimited = this.recordCrash(agent.id);
+      const rateLimited = this.recordCrash(agent.person.alias);
       if (rateLimited) {
-        this.config.state.updateStatus(agent.id, 'errored', {
+        this.config.state.updateStatus(agent.person.alias, 'errored', {
           currentTask: `Rate-limited after ${CRASH_MAX_COUNT} crashes: ${result.error}`,
         });
       }

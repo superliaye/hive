@@ -165,4 +165,70 @@ describe('triageMessages', () => {
 
     expect(results[0].score).toBe(8.3);
   });
+
+  it('unwraps Claude CLI JSON envelope before parsing triage output', async () => {
+    // Claude --output-format json wraps output in { "result": "...", "usage": {...} }
+    const triagePayload = JSON.stringify({
+      results: [
+        { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Direct request from manager' },
+      ],
+    });
+    const envelope = JSON.stringify({
+      result: triagePayload,
+      usage: { input_tokens: 150, output_tokens: 80 },
+    });
+
+    mockSpawnClaude.mockResolvedValue({
+      stdout: envelope,
+      stderr: '',
+      exitCode: 0,
+      durationMs: 400,
+      tokensIn: 150,
+      tokensOut: 80,
+    });
+
+    const messages = [makeScoredMessage({ messageId: 'msg-1', score: 6.0 })];
+    const results = await triageMessages(messages, {
+      agentId: 'eng-1',
+      agentDir: '/tmp/org/ceo/engineering/eng-1',
+      priorities: 'Build API',
+      bureau: 'Reports to vp-eng',
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].classification).toBe('ACT_NOW');
+    expect(results[0].reasoning).toBe('Direct request from manager');
+  });
+
+  it('strips markdown code fences from triage output', async () => {
+    const triagePayload = '```json\n' + JSON.stringify({
+      results: [
+        { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent from CEO' },
+      ],
+    }) + '\n```';
+    const envelope = JSON.stringify({
+      result: triagePayload,
+      usage: { input_tokens: 100, output_tokens: 50 },
+    });
+
+    mockSpawnClaude.mockResolvedValue({
+      stdout: envelope,
+      stderr: '',
+      exitCode: 0,
+      durationMs: 300,
+      tokensIn: 100,
+      tokensOut: 50,
+    });
+
+    const messages = [makeScoredMessage({ messageId: 'msg-1', score: 8.0 })];
+    const results = await triageMessages(messages, {
+      agentId: 'eng-1',
+      agentDir: '/tmp/org/ceo/engineering/eng-1',
+      priorities: '',
+      bureau: '',
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].classification).toBe('ACT_NOW');
+  });
 });

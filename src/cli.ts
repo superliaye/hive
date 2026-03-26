@@ -1,10 +1,13 @@
 import { Command } from 'commander';
-import { parseOrgTree } from './org/parser.js';
+import { parseOrgFlat } from './org/parser.js';
+import { scaffold } from './org/scaffold.js';
 import { SqliteCommsProvider } from './comms/sqlite-provider.js';
 import { ChannelManager } from './comms/channel-manager.js';
 import { MessageGateway } from './comms/message-gateway.js';
 import { chatAction, observeAction, formatMessage, startFollowing } from './comms/cli-commands.js';
 import { HiveContext } from './context.js';
+import { ChatDb } from './chat/db.js';
+import { MemoryManager } from './memory/manager.js';
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs';
@@ -42,19 +45,25 @@ program
     const ctx = await HiveContext.create();
     try {
       const { orgChart } = ctx;
-      function printAgent(id: string, indent: number): void {
-        const agent = orgChart.agents.get(id);
-        if (!agent) return;
+      // Build tree: find roots (people with no reportsTo or reportsTo not in agents)
+      const agentList = Array.from(orgChart.agents.values());
+      const roots = agentList.filter(a => !a.reportsTo);
+
+      function printAgent(agent: typeof agentList[0], indent: number): void {
         const prefix = '  '.repeat(indent);
         const emoji = agent.identity.emoji ?? '🔹';
-        console.log(`${prefix}${emoji} ${chalk.bold(agent.identity.name)} (${agent.identity.role}) [${agent.id}]`);
-        for (const childId of agent.childIds) {
-          printAgent(childId, indent + 1);
+        console.log(`${prefix}${emoji} ${chalk.bold(agent.identity.name)} (${agent.identity.role}) [${agent.person.alias}]`);
+        // Find direct reports
+        const reports = agentList.filter(a => a.reportsTo?.id === agent.person.id);
+        for (const report of reports) {
+          printAgent(report, indent + 1);
         }
       }
       console.log(chalk.underline('\nOrg Chart:\n'));
-      printAgent(orgChart.root.id, 0);
-      console.log(`\n${chalk.dim(`${orgChart.agents.size} agents, ${orgChart.channels.length} channels`)}\n`);
+      for (const root of roots) {
+        printAgent(root, 0);
+      }
+      console.log(`\n${chalk.dim(`${orgChart.agents.size} agents`)}\n`);
     } finally {
       ctx.close();
     }
@@ -66,8 +75,8 @@ program
   .action(async () => {
     const ctx = await HiveContext.create();
     try {
-      for (const [id] of ctx.orgChart.agents) {
-        ctx.state.register(id);
+      for (const [alias] of ctx.orgChart.agents) {
+        ctx.state.register(alias);
       }
       const states = ctx.state.listAll();
       console.log(chalk.underline('\nAgent Status:\n'));
@@ -87,10 +96,26 @@ program
   .command('init')
   .description('Bootstrap a new organization')
   .requiredOption('--mission <mission>', 'Organization mission statement')
-  .option('--template <template>', 'Org template to use', 'startup')
+  .option('--timezone <tz>', 'Organization timezone', 'America/Los_Angeles')
   .action(async (opts) => {
-    console.log(`hive init — mission: "${opts.mission}", template: ${opts.template}`);
-    console.log(chalk.dim('(Not yet implemented — see Plan 4)'));
+    const targetDir = process.cwd();
+    const orgDir = path.join(targetDir, 'org');
+
+    if (fs.existsSync(orgDir)) {
+      console.error(chalk.red('org/ directory already exists. Cannot re-initialize.'));
+      process.exit(1);
+    }
+
+    const result = scaffold({
+      targetDir,
+      mission: opts.mission,
+      timezone: opts.timezone,
+    });
+
+    console.log(chalk.green('✔ Organization bootstrapped!\n'));
+    console.log(`  ${chalk.bold('Mission:')} ${opts.mission}`);
+    console.log(`  ${chalk.bold('Agents:')} ${result.agentsCreated.join(', ')}`);
+    console.log(`\n  ${chalk.dim('Next: hive start')}`);
   });
 
 program
@@ -112,9 +137,11 @@ program
       process.exit(1);
     }
 
-    console.log(chalk.blue('Parsing org tree...'));
-    const orgChart = await parseOrgTree(orgDir);
-    console.log(chalk.dim(`Found ${orgChart.agents.size} agents, ${orgChart.channels.length} channels`));
+    console.log(chalk.blue('Parsing org...'));
+    const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
+    const people = HiveContext.loadPeople(chatDb);
+    const orgChart = await parseOrgFlat(orgDir, people);
+    console.log(chalk.dim(`Found ${orgChart.agents.size} agents`));
 
     // Auto-wire comms provider from SQLite
     const commsDb = path.join(dataDir, 'comms.db');
@@ -123,8 +150,7 @@ program
     const stateStore = new AgentStateStore(path.join(dataDir, 'orchestrator.db'));
     const auditStore = new AuditStore(path.join(dataDir, 'audit.db'));
 
-    // Sync channels from the org tree so all org-defined channels exist in the DB
-    await channelManager.syncFromOrgTree(orgChart);
+    const memoryManager = new MemoryManager(dataDir);
 
     const daemon = new Daemon({
       orgChart,
@@ -132,6 +158,7 @@ program
       audit: auditStore,
       state: stateStore,
       channelManager,
+      memory: memoryManager,
       dataDir,
       orgDir,
       pidFilePath: path.join(dataDir, 'hive.pid'),
@@ -159,6 +186,7 @@ program
       stateStore.close();
       commsProvider.close();
       auditStore.close();
+      chatDb.close();
       console.log(chalk.green('Hive stopped.'));
       process.exit(0);
     };
@@ -224,6 +252,42 @@ program
   });
 
 program
+  .command('post')
+  .description('Post a message to any channel as any agent')
+  .requiredOption('--channel <channel>', 'Channel name (without #)')
+  .requiredOption('--as <sender>', 'Agent ID to send as')
+  .option('--port <port>', 'Dashboard port for daemon notification', '3001')
+  .argument('<message>', 'Message content')
+  .action(async (message: string, opts: { channel: string; as: string; port: string }) => {
+    // Try dashboard API first (notifies daemon via signalChannel)
+    try {
+      const res = await fetch(`http://localhost:${opts.port}/api/chat/post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: opts.channel, sender: opts.as, message }),
+      });
+      if (res.ok) {
+        console.log(chalk.green(`Posted to #${opts.channel} as @${opts.as}`));
+        return;
+      }
+    } catch {
+      // Dashboard not running — fall back to direct SQLite
+    }
+
+    // Fallback: write directly to SQLite (daemon won't be notified until next tick)
+    const ctx = await HiveContext.create();
+    try {
+      await ctx.comms.postMessage(opts.channel, opts.as, message);
+      console.log(chalk.green(`Posted to #${opts.channel} as @${opts.as}`));
+      console.log(chalk.dim('(daemon not notified — will pick up on next tick)'));
+    } catch (err: any) {
+      console.error(chalk.red(`Error: ${err.message}`));
+    } finally {
+      ctx.close();
+    }
+  });
+
+program
   .command('observe')
   .description('Watch a channel\'s messages (tail -f style)')
   .argument('<channel>', 'Channel name to observe (without #)')
@@ -275,6 +339,48 @@ program
       if (!opts.follow) {
         ctx.close();
       }
+    }
+  });
+
+program
+  .command('memory')
+  .description('Search or index agent memory')
+  .argument('<action>', 'Action: search, index, status')
+  .argument('[agent-id]', 'Agent ID (required for search)')
+  .argument('[query...]', 'Search query')
+  .option('-n, --limit <number>', 'Max results', '5')
+  .action(async (action: string, agentId: string | undefined, queryParts: string[], opts: { limit: string }) => {
+    const ctx = await HiveContext.create();
+    try {
+      if (action === 'index') {
+        console.log(chalk.blue('Indexing all agent memories...'));
+        await ctx.memory.indexAll(ctx.orgChart.agents, msg => console.log(chalk.dim(msg)));
+        console.log(chalk.green('Done.'));
+      } else if (action === 'search') {
+        if (!agentId) { console.error(chalk.red('Agent ID required')); process.exit(1); }
+        const query = queryParts.join(' ');
+        if (!query) { console.error(chalk.red('Query required')); process.exit(1); }
+        const results = await ctx.memory.search(agentId, query, parseInt(opts.limit, 10));
+        if (results.length === 0) {
+          console.log(chalk.dim('No results. Run `hive memory index` first.'));
+        }
+        for (const r of results) {
+          console.log(chalk.cyan(`[${r.score.toFixed(3)}] ${path.basename(r.path)}:${r.startLine}`));
+          console.log(r.text.slice(0, 200));
+          console.log();
+        }
+      } else if (action === 'status') {
+        for (const [alias] of ctx.orgChart.agents) {
+          const store = ctx.memory.getStore(alias);
+          const count = store.chunkCount();
+          const files = store.indexedFiles().length;
+          console.log(`${chalk.bold(alias)}: ${count} chunks, ${files} files indexed`);
+        }
+      } else {
+        console.error(chalk.red(`Unknown action: ${action}. Use: search, index, status`));
+      }
+    } finally {
+      ctx.close();
     }
   });
 

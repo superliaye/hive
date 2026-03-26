@@ -1,8 +1,9 @@
-import type { OrgChart } from '../types.js';
+import type { OrgChart, Person } from '../types.js';
 import type { AgentStateStore } from '../state/agent-state.js';
 import type { SqliteCommsProvider } from '../comms/sqlite-provider.js';
 import type { AuditStore } from '../audit/store.js';
 import type { ChannelManager } from '../comms/channel-manager.js';
+import type { MemoryManager } from '../memory/manager.js';
 
 /**
  * Unread message from the inbox — owned by daemon, not the deprecated heartbeat module.
@@ -24,9 +25,13 @@ export interface DaemonConfig {
   audit: AuditStore;
   state: AgentStateStore;
   channelManager: ChannelManager;
+  memory: MemoryManager;
   dataDir: string;
   orgDir: string;
   pidFilePath: string;
+
+  /** Callback to load people from DB (needed for hot reload). */
+  loadPeople?: () => Person[];
 
   /** Default tick interval when idle (ms). Default: 600_000 (10 min) */
   tickIntervalMs?: number;

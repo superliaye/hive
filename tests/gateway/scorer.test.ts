@@ -9,77 +9,75 @@ import type { AgentConfig } from '../../src/types.js';
 import type { ScoringWeights } from '../../src/gateway/types.js';
 import { DEFAULT_SCORING_WEIGHTS } from '../../src/gateway/types.js';
 
-function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
+function makePerson(alias: string, overrides: Partial<import('../../src/types.js').Person> = {}): import('../../src/types.js').Person {
   return {
-    id: 'ceo',
-    identity: { name: 'CEO', role: 'CEO', model: 'sonnet', tools: [] },
-    dir: '/tmp/org/ceo',
-    depth: 0,
-    parentId: null,
-    childIds: ['vp-eng'],
+    id: 1,
+    alias,
+    name: alias.toUpperCase(),
+    status: 'active' as const,
+    ...overrides,
+  };
+}
+
+function makeAgent(alias: string, overrides: Partial<AgentConfig> = {}): AgentConfig {
+  const person = overrides.person ?? makePerson(alias);
+  return {
+    person,
+    identity: { name: person.name, role: person.name, model: 'sonnet' },
+    dir: `/tmp/org/${person.id}-${alias}`,
+    reportsTo: null,
+    directReports: [],
     files: {
-      identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '',
+      identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '',
     },
     ...overrides,
   };
 }
 
 describe('getHierarchyScore', () => {
-  it('returns 10 for messages from manager (parentId)', () => {
-    const agent = makeAgent({ id: 'vp-eng', parentId: 'ceo' });
+  it('returns 10 for messages from manager (reportsTo)', () => {
+    const agent = makeAgent('vp-eng', { reportsTo: makePerson('ceo', { id: 2 }) });
     expect(getHierarchyScore('ceo', agent)).toBe(10);
   });
 
-  it('returns 5 for messages from peer (same parent)', () => {
-    const agent = makeAgent({ id: 'eng-1', parentId: 'vp-eng' });
-    // Peer detection requires orgAgents map — peers share a parent
+  it('returns 5 for messages from peer (same reportsTo)', () => {
+    const vpPerson = makePerson('vp-eng', { id: 3 });
+    const agent = makeAgent('eng-1', { reportsTo: vpPerson });
     expect(getHierarchyScore('eng-2', agent, new Map([
-      ['eng-1', makeAgent({ id: 'eng-1', parentId: 'vp-eng' })],
-      ['eng-2', makeAgent({ id: 'eng-2', parentId: 'vp-eng' })],
-      ['vp-eng', makeAgent({ id: 'vp-eng', parentId: 'ceo', childIds: ['eng-1', 'eng-2'] })],
+      ['eng-1', makeAgent('eng-1', { reportsTo: vpPerson })],
+      ['eng-2', makeAgent('eng-2', { person: makePerson('eng-2', { id: 4 }), reportsTo: vpPerson })],
+      ['vp-eng', makeAgent('vp-eng', { person: vpPerson, directReports: [makePerson('eng-1'), makePerson('eng-2', { id: 4 })] })],
     ]))).toBe(5);
   });
 
-  it('returns 3 for messages from direct report (childIds)', () => {
-    const agent = makeAgent({ id: 'vp-eng', childIds: ['eng-1', 'eng-2'] });
+  it('returns 3 for messages from direct report', () => {
+    const agent = makeAgent('vp-eng', { directReports: [makePerson('eng-1', { id: 2 }), makePerson('eng-2', { id: 3 })] });
     expect(getHierarchyScore('eng-1', agent)).toBe(3);
   });
 
   it('returns 1 for messages from unknown sender', () => {
-    const agent = makeAgent();
+    const agent = makeAgent('ceo');
     expect(getHierarchyScore('random-agent', agent)).toBe(1);
   });
 
   it('returns 10 for super-user sender (always high)', () => {
-    const agent = makeAgent();
+    const agent = makeAgent('ceo');
     expect(getHierarchyScore('super-user', agent)).toBe(10);
   });
 });
 
 describe('getChannelWeight', () => {
-  it('returns 10 for #board channel', () => {
-    expect(getChannelWeight('board')).toBe(10);
+  it('returns 8 for dm: channels', () => {
+    expect(getChannelWeight('dm:ceo-eng-1')).toBe(8);
   });
 
-  it('returns 9 for #incidents channel', () => {
-    expect(getChannelWeight('incidents')).toBe(9);
+  it('returns 5 for non-dm channels', () => {
+    expect(getChannelWeight('eng-backend')).toBe(5);
   });
 
-  it('returns 7 for #approvals channel', () => {
-    expect(getChannelWeight('approvals')).toBe(7);
-  });
-
-  it('returns 5 for agent team channel', () => {
-    const agent = makeAgent({ id: 'eng-1' });
-    expect(getChannelWeight('eng-backend', agent)).toBe(5);
-  });
-
-  it('returns 3 for #all-hands', () => {
-    expect(getChannelWeight('all-hands')).toBe(3);
-  });
-
-  it('returns 2 for unknown channels', () => {
-    expect(getChannelWeight('random-channel')).toBe(2);
+  it('returns 5 for named channels', () => {
+    const agent = makeAgent('eng-1');
+    expect(getChannelWeight('all-hands', agent)).toBe(5);
   });
 });
 
@@ -109,7 +107,7 @@ describe('computeRecencyDecay', () => {
 
 describe('scoreMessage', () => {
   it('computes weighted score in 0-10 range', () => {
-    const agent = makeAgent({ id: 'eng-1', parentId: 'vp-eng' });
+    const agent = makeAgent('eng-1', { reportsTo: makePerson('vp-eng', { id: 2 }) });
     const score = scoreMessage(
       {
         messageId: 'msg-1',
@@ -128,7 +126,7 @@ describe('scoreMessage', () => {
   });
 
   it('scores urgent messages from manager higher than non-urgent from unknown', () => {
-    const agent = makeAgent({ id: 'eng-1', parentId: 'vp-eng' });
+    const agent = makeAgent('eng-1', { reportsTo: makePerson('vp-eng', { id: 2 }) });
     const urgentFromManager = scoreMessage(
       {
         messageId: 'msg-1',
@@ -157,7 +155,7 @@ describe('scoreMessage', () => {
   });
 
   it('respects custom scoring weights', () => {
-    const agent = makeAgent({ id: 'eng-1', parentId: 'vp-eng' });
+    const agent = makeAgent('eng-1', { reportsTo: makePerson('vp-eng', { id: 2 }) });
     const mentionHeavy: ScoringWeights = {
       authority: 0.05,
       urgency: 0.05,
@@ -195,7 +193,7 @@ describe('scoreMessage', () => {
 
   it('returns sorted scored messages from rankMessages', async () => {
     const { rankMessages } = await import('../../src/gateway/scorer.js');
-    const agent = makeAgent({ id: 'eng-1', parentId: 'vp-eng' });
+    const agent = makeAgent('eng-1', { reportsTo: makePerson('vp-eng', { id: 2 }) });
     const messages = [
       {
         messageId: 'msg-low',

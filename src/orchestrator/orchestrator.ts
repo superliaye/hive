@@ -207,9 +207,9 @@ export class Orchestrator {
    */
   private async executeHeartbeat(agent: AgentConfig): Promise<HeartbeatResult> {
     // If there's already an in-flight heartbeat for this agent, skip
-    if (this.inFlightHeartbeats.has(agent.id)) {
+    if (this.inFlightHeartbeats.has(agent.person.alias)) {
       return {
-        agentId: agent.id,
+        agentId: agent.person.alias,
         messagesProcessed: 0,
         actNowCount: 0,
         queueCount: 0,
@@ -218,17 +218,17 @@ export class Orchestrator {
         workPerformed: false,
         durationMs: 0,
         skipped: true,
-        skipReason: `Heartbeat already in-flight for ${agent.id}`,
+        skipReason: `Heartbeat already in-flight for ${agent.person.alias}`,
       };
     }
 
     // Crash rate limiting: skip if agent has crashed too many times recently
-    if (this.isCrashRateLimited(agent.id)) {
-      this.stateStore.updateStatus(agent.id, 'errored', {
+    if (this.isCrashRateLimited(agent.person.alias)) {
+      this.stateStore.updateStatus(agent.person.alias, 'errored', {
         currentTask: `Rate-limited: ${CRASH_MAX_COUNT}+ crashes in ${CRASH_WINDOW_MS / 60_000} min`,
       });
       return {
-        agentId: agent.id,
+        agentId: agent.person.alias,
         messagesProcessed: 0,
         actNowCount: 0,
         queueCount: 0,
@@ -237,7 +237,7 @@ export class Orchestrator {
         workPerformed: false,
         durationMs: 0,
         skipped: true,
-        skipReason: `Agent ${agent.id} is crash-rate-limited (${CRASH_MAX_COUNT}+ crashes in ${CRASH_WINDOW_MS / 60_000} min)`,
+        skipReason: `Agent ${agent.person.alias} is crash-rate-limited (${CRASH_MAX_COUNT}+ crashes in ${CRASH_WINDOW_MS / 60_000} min)`,
       };
     }
 
@@ -254,22 +254,22 @@ export class Orchestrator {
     };
 
     const heartbeatPromise = runHeartbeat(ctx);
-    this.inFlightHeartbeats.set(agent.id, heartbeatPromise);
+    this.inFlightHeartbeats.set(agent.person.alias, heartbeatPromise);
 
     try {
       const result = await heartbeatPromise;
       // Track crashes: if the heartbeat returned an error, record it
       if (result.error) {
-        const rateLimited = this.recordCrash(agent.id);
+        const rateLimited = this.recordCrash(agent.person.alias);
         if (rateLimited) {
-          this.stateStore.updateStatus(agent.id, 'errored', {
+          this.stateStore.updateStatus(agent.person.alias, 'errored', {
             currentTask: `Rate-limited after ${CRASH_MAX_COUNT} crashes: ${result.error}`,
           });
         }
       }
       return result;
     } finally {
-      this.inFlightHeartbeats.delete(agent.id);
+      this.inFlightHeartbeats.delete(agent.person.alias);
     }
   }
 }

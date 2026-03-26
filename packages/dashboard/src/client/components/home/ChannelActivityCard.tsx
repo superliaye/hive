@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 
 interface ChannelPreview {
   name: string;
-  lastMessage?: Message;
+  recentMessages: Message[];
 }
 
 export function ChannelActivityCard() {
@@ -16,23 +16,35 @@ export function ChannelActivityCard() {
   useEffect(() => {
     if (!channels) return;
     Promise.all(
-      channels.slice(0, 5).map(async (ch) => {
+      channels.map(async (ch) => {
         try {
-          const res = await fetch(`/api/channels/${ch.name}/messages?limit=1`);
+          const res = await fetch(`/api/channels/${ch.name}/messages?limit=3`);
           const msgs: Message[] = await res.json();
-          return { name: ch.name, lastMessage: msgs[0] };
+          return { name: ch.name, recentMessages: msgs };
         } catch {
-          return { name: ch.name };
+          return { name: ch.name, recentMessages: [] as Message[] };
         }
       })
-    ).then(setPreviews);
+    ).then(all => {
+      // Sort by most recent message, channels with messages first
+      const sorted = all.sort((a, b) => {
+        const aLast = a.recentMessages[a.recentMessages.length - 1];
+        const bLast = b.recentMessages[b.recentMessages.length - 1];
+        if (!aLast && !bLast) return 0;
+        if (!aLast) return 1;
+        if (!bLast) return -1;
+        return new Date(bLast.timestamp).getTime() - new Date(aLast.timestamp).getTime();
+      });
+      setPreviews(sorted.slice(0, 5));
+    });
   }, [channels]);
 
   // Real-time: update channel previews when new messages arrive via SSE
   useSSEEvent('new-message', useCallback((event: any) => {
+    const newMsg: Message = { id: event.id, sender: event.sender, content: event.content, timestamp: event.timestamp, channel: event.channel };
     setPreviews(prev => prev.map(p =>
       p.name === event.channel
-        ? { ...p, lastMessage: { id: event.id, sender: event.sender, content: event.content, timestamp: event.timestamp, channel: event.channel } }
+        ? { ...p, recentMessages: [...p.recentMessages.slice(-2), newMsg] }
         : p
     ));
   }, []));
@@ -40,22 +52,29 @@ export function ChannelActivityCard() {
   return (
     <DashboardCard title="Channel Activity" icon={'\u25A3'} linkTo="/channels">
       {previews.length > 0 ? (
-        <div className="space-y-2">
-          {previews.map(p => (
-            <div key={p.name} className="text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="text-amber-500 font-mono">#{p.name}</span>
-                {p.lastMessage && (
-                  <span className="text-slate-600 ml-auto">{timeAgo(p.lastMessage.timestamp)}</span>
-                )}
+        <div className="space-y-3">
+          {previews.map(p => {
+            const lastMsg = p.recentMessages[p.recentMessages.length - 1];
+            return (
+              <div key={p.name} className="text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-amber-500 font-mono">#{p.name}</span>
+                  {lastMsg && (
+                    <span className="text-slate-600 ml-auto">{timeAgo(lastMsg.timestamp)}</span>
+                  )}
+                </div>
+                {p.recentMessages.length > 0 ? (
+                  <div className="mt-1 space-y-0.5">
+                    {p.recentMessages.map(m => (
+                      <p key={m.id} className="text-slate-400 truncate">
+                        <span className="text-slate-500">{m.sender}:</span> {m.content.slice(0, 60)}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              {p.lastMessage && (
-                <p className="text-slate-400 truncate mt-0.5">
-                  {p.lastMessage.sender}: {p.lastMessage.content.slice(0, 60)}
-                </p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p className="text-xs text-slate-500">No channels yet</p>

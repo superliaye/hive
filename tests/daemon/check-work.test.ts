@@ -35,14 +35,24 @@ const mockSpawnClaude = vi.mocked(spawnClaude);
 const mockTriageMessages = vi.mocked(triageMessages);
 const mockRankMessages = vi.mocked(rankMessages);
 
-function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
+function makePerson(alias: string, overrides: Partial<import('../../src/types.js').Person> = {}): import('../../src/types.js').Person {
   return {
-    id: 'ceo',
-    identity: { name: 'CEO', role: 'CEO', model: 'sonnet', tools: ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob'] },
-    dir: '/tmp/org/ceo',
-    depth: 0,
-    parentId: null,
-    childIds: ['eng-1'],
+    id: 1,
+    alias,
+    name: alias.toUpperCase(),
+    status: 'active' as const,
+    ...overrides,
+  };
+}
+
+function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
+  const person = overrides.person ?? makePerson('ceo');
+  return {
+    person,
+    identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
+    dir: `/tmp/org/1-${person.alias}`,
+    reportsTo: null,
+    directReports: [makePerson('eng-1', { id: 2 })],
     files: {
       identity: '---\nname: CEO\nrole: CEO\nmodel: sonnet\n---\n# Identity',
       soul: '# Soul',
@@ -50,6 +60,7 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
       priorities: '# Priorities\n## Ready\n1. Ship Plan 4',
       routine: '# Routine',
       memory: '',
+      protocols: '',
     },
     ...overrides,
   };
@@ -70,10 +81,18 @@ describe('checkWork', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  const mockAudit = {
+    logInvocation: vi.fn(() => 'inv-1'),
+    getInvocations: vi.fn(() => []),
+    getTokenTotals: vi.fn(() => ({ totalIn: 0, totalOut: 0 })),
+    close: vi.fn(),
+  };
+
   function makeCtx(overrides: Partial<CheckWorkContext> = {}): CheckWorkContext {
     return {
       agent: makeAgent(),
       stateStore,
+      audit: mockAudit as any,
       getUnread: vi.fn(async () => []),
       markRead: vi.fn(async () => {}),
       postMessage: vi.fn(async () => {}),
@@ -107,10 +126,12 @@ describe('checkWork', () => {
       { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Super user request', score: 9.0 },
     ]);
     mockSpawnClaude.mockResolvedValue({
-      stdout: 'Status: all good.',
+      stdout: JSON.stringify({ result: 'Status: all good.\nACTION: Reported team status', usage: { input_tokens: 500, output_tokens: 100 } }),
       stderr: '',
       exitCode: 0,
       durationMs: 3000,
+      tokensIn: 500,
+      tokensOut: 100,
     });
 
     const ctx = makeCtx({
@@ -179,7 +200,7 @@ describe('checkWork', () => {
     let statusDuringWork: string | undefined;
     mockSpawnClaude.mockImplementation(async () => {
       statusDuringWork = stateStore.get('ceo')?.status;
-      return { stdout: 'Done.', stderr: '', exitCode: 0, durationMs: 1000 };
+      return { stdout: JSON.stringify({ result: 'Done.' }), stderr: '', exitCode: 0, durationMs: 1000 };
     });
 
     const ctx = makeCtx({ getUnread: vi.fn(async () => unread) });
@@ -237,4 +258,80 @@ describe('checkWork', () => {
     expect(result.agentInvoked).toBe(false);
     expect(mockMarkRead).toHaveBeenCalledWith('ceo', ['msg-1']);
   });
+
+  it('logs invocation to audit store with token counts', async () => {
+    const unread = [
+      { id: 'msg-1', channel: 'board', sender: 'super-user', content: 'status?', timestamp: new Date() },
+    ];
+
+    mockRankMessages.mockReturnValue([
+      { messageId: 'msg-1', channel: 'board', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
+    ]);
+    mockTriageMessages.mockResolvedValue([
+      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
+    ]);
+    mockSpawnClaude.mockResolvedValue({
+      stdout: JSON.stringify({ result: 'All systems nominal.', usage: { input_tokens: 800, output_tokens: 200 } }),
+      stderr: '',
+      exitCode: 0,
+      durationMs: 2000,
+      tokensIn: 800,
+      tokensOut: 200,
+    });
+
+    const ctx = makeCtx({ getUnread: vi.fn(async () => unread) });
+    stateStore.register('ceo');
+
+    await checkWork(ctx);
+
+    expect(mockAudit.logInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'ceo',
+        invocationType: 'checkWork',
+        model: 'sonnet',
+        tokensIn: 800,
+        tokensOut: 200,
+        durationMs: 2000,
+      })
+    );
+  });
+
+  it('passes cache token counts through to audit store', async () => {
+    const unread = [
+      { id: 'msg-1', channel: 'board', sender: 'super-user', content: 'status?', timestamp: new Date() },
+    ];
+
+    mockRankMessages.mockReturnValue([
+      { messageId: 'msg-1', channel: 'board', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
+    ]);
+    mockTriageMessages.mockResolvedValue([
+      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
+    ]);
+    mockSpawnClaude.mockResolvedValue({
+      stdout: JSON.stringify({ result: 'Done.', usage: { input_tokens: 4, cache_read_input_tokens: 1200, cache_creation_input_tokens: 300, output_tokens: 736 } }),
+      stderr: '',
+      exitCode: 0,
+      durationMs: 5000,
+      tokensIn: 1504,
+      tokensOut: 736,
+      cacheReadTokens: 1200,
+      cacheCreationTokens: 300,
+    });
+
+    const ctx = makeCtx({ getUnread: vi.fn(async () => unread) });
+    stateStore.register('ceo');
+
+    await checkWork(ctx);
+
+    expect(mockAudit.logInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokensIn: 1504,
+        tokensOut: 736,
+        cacheReadTokens: 1200,
+        cacheCreationTokens: 300,
+      })
+    );
+  });
+
 });
+

@@ -19,6 +19,7 @@ export class ChatDb {
         role_template TEXT,
         status TEXT NOT NULL DEFAULT 'active',
         folder TEXT,
+        reports_to INTEGER REFERENCES people(id),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 

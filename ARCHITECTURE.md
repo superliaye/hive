@@ -1,10 +1,10 @@
 # Hive Architecture
 
-> Living document. Update when architecture changes. Last updated: 2026-03-24.
+> Living document. Update when architecture changes. Last updated: 2026-03-25.
 
 ## What is Hive
 
-A general-purpose framework for building autonomous agent organizations. Agents are Claude instances organized in a hierarchy (like a company). They communicate through local slack channels, manage their own priorities and memory, and act autonomously. A single daemon manages the event loop.
+A general-purpose framework for building autonomous agent organizations. Agents are Claude instances organized in a flat directory structure, with hierarchy defined in a SQLite `people` table (`reports_to` column). They communicate through DM and group channels, manage their own priorities and memory, and act autonomously. A single daemon manages the event loop.
 
 ## System Overview
 
@@ -14,17 +14,29 @@ A general-purpose framework for building autonomous agent organizations. Agents 
                       [DM]
                         |
                     +-------+
-                    |  CEO  |  (id=1, root agent)
+                    |  CEO  |  (alias=ceo, id=1)
                     +-------+
-                   /    |    \
-               [DM]  [DM]   [DM]
-               /        |        \
-           +----+  +--------+  +------+
-           | AR |  |plat-eng|  |qa-eng|
-           +----+  +--------+  +------+
-                \       |       /
-              [Group: eng-team]
+                   /         \
+               [DM]          [DM]
+               /                \
+           +----+          +--------+
+           | AR |          |plat-eng|
+           +----+          +--------+
 ```
+
+Org directory is flat — all agents at the same level:
+
+```
+org/
+├── ORG.md
+├── PROTOCOLS.md        (optional, shared across all agents)
+├── 1-ceo/
+├── 2-ar/
+├── 3-plat-eng/
+└── ...
+```
+
+Hierarchy is defined in the `people` table in `org-state.db`, not by directory nesting. The `reports_to` column stores the person ID of each agent's manager.
 
 ## Core Data Flow
 
@@ -69,11 +81,11 @@ The agent (opus) handles all decision-making: triage, prioritization, response, 
 src/
 ├── cli.ts                 CLI entry point (hive init|start|stop|chat|dashboard)
 ├── context.ts             HiveContext — creates all stores, parses org, wires deps
-├── types.ts               Core interfaces: AgentConfig, OrgChart, ChannelDef, AgentState
+├── types.ts               Core interfaces: Person, AgentConfig, OrgChart, AgentIdentity
 │
 ├── org/
-│   ├── parser.ts          Walk org/ tree → OrgChart. Generates channel topology.
-│   └── scaffold.ts        `hive init` — bootstrap from role templates
+│   ├── parser.ts          Scan flat org/ dir → OrgChart. Resolves hierarchy from people table.
+│   └── scaffold.ts        `hive init` — bootstrap CEO + AR in flat org/{id}-{alias}/ folders
 │
 ├── daemon/
 │   ├── daemon.ts          Main event loop. Tick-based + signal-driven. Crash recovery.
@@ -122,6 +134,82 @@ src/
     └── crash-recovery.ts  3 crashes in 10min → rate limit
 ```
 
+## Org Model
+
+### Flat Directory Structure
+
+Agent folders live directly under `org/`, named `{id}-{alias}`:
+
+```
+org/1-ceo/
+org/2-ar/
+org/3-plat-eng/
+org/4-qa-eng/
+```
+
+No nesting. The `{id}` matches the person's ID in the `people` table. The `{alias}` is the human-readable identifier used throughout the system (agent IDs are aliases).
+
+### People Table (Source of Truth)
+
+The `people` table in `org-state.db` defines all agents and their hierarchy:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | integer | Primary key |
+| `alias` | text | Unique identifier (e.g., `ceo`, `ar`, `plat-eng`) |
+| `name` | text | Display name |
+| `roleTemplate` | text | Optional role template reference |
+| `status` | text | `active` or `inactive` |
+| `folder` | text | `org/{id}-{alias}` |
+| `reportsTo` | integer | Person ID of manager (null for CEO) |
+
+Hierarchy is reconstructed at parse time from `reports_to`, not from directory structure.
+
+### Parsing: `parseOrgFlat(orgDir, people)`
+
+`parser.ts` exports `parseOrgFlat(orgDir, people)` which:
+
+1. Scans `org/` for `{id}-{alias}/` directories containing `IDENTITY.md`
+2. Matches each folder to a person in the `people` array (by alias or ID)
+3. Resolves `reportsTo` and `directReports` from the people table
+4. Returns `OrgChart { agents: Map<string, AgentConfig>, people: Person[] }`
+
+### Core Types
+
+```typescript
+interface Person {
+  id: number;
+  alias: string;
+  name: string;
+  roleTemplate?: string;
+  status: 'active' | 'inactive';
+  folder?: string;               // org/{id}-{alias}
+  reportsTo?: number;            // person ID of manager
+}
+
+interface AgentConfig {
+  person: Person;                 // Source of truth from DB
+  dir: string;                    // Absolute path to agent folder
+  reportsTo: Person | null;       // Resolved manager
+  directReports: Person[];        // People who report to this person
+  files: {
+    identity: string;             // IDENTITY.md content
+    soul: string;                 // SOUL.md content
+    bureau: string;               // BUREAU.md content
+    priorities: string;           // PRIORITIES.md content
+    routine: string;              // ROUTINE.md content
+    memory: string;               // MEMORY.md + recent daily logs
+    protocols: string;            // Shared PROTOCOLS.md content
+  };
+  identity: AgentIdentity;        // Parsed frontmatter from IDENTITY.md
+}
+
+interface OrgChart {
+  agents: Map<string, AgentConfig>;  // alias → config
+  people: Person[];                  // All people from DB
+}
+```
+
 ## Communication — `hive chat`
 
 Chat is a module inside hive (`src/chat/`). It owns channel and message storage in `org-state.db`, reads `people` from the same DB. Fully testable in isolation.
@@ -133,7 +221,7 @@ Chat is a module inside hive (`src/chat/`). It owns channel and message storage 
 | **DM** | Lazy (first message creates it) | Exactly 2 people | dm between CEO and AR |
 | **Group** | Explicit (`hive chat group create`) | N people (min 2) | eng-team, cross-func sprint |
 
-No special named channels (`#board`, `#approvals`, `#team-*`). Team channels are just groups created on demand. Any member can manage groups they belong to. Group names: kebab-case `[a-z0-9-]`, max 50 chars, globally unique.
+No special named channels. Team channels are just groups created on demand. Any member can manage groups they belong to. Group names: kebab-case `[a-z0-9-]`, max 50 chars, globally unique.
 
 ### CLI Commands
 
@@ -176,7 +264,7 @@ hive chat search -i "pattern"                    # Case insensitive
 hive chat search -E "deploy.*fail"               # Extended regex (default: literal)
 hive chat search "pattern" --limit 20            # Max results (default 20)
 hive chat search "pattern" --limit 20 --offset 40  # Pagination
-# Filters composable: --from, scope (@/\#), --after, --before, -i, -E
+# Filters composable: --from, scope (@/#), --after, --before, -i, -E
 # At least one of: scope, --from, or "pattern" required
 # Output: channel | sender | seq | timestamp | message (newest first)
 # Header: "Found 47 results (showing 1-20)"
@@ -243,11 +331,12 @@ Cross-team communication: agents create ad-hoc groups for cross-functional work 
 Each agent lives in a flat directory under `org/`:
 
 ```
-org/001-ceo/
+org/1-ceo/
 ├── config.json    Gateway-only: model, mcp, skills (never in agent prompt)
-├── IDENTITY.md    Pure prose identity (no frontmatter, loaded into agent prompt)
+├── IDENTITY.md    Pure prose identity + YAML frontmatter (name, role, model, emoji, vibe, skills)
 ├── SOUL.md        Personality, values, communication style
 ├── BUREAU.md      Org position, reporting structure, collaborator notes
+├── ROUTINE.md     Invocation procedure and priority management rules
 ├── PRIORITIES.md  Starting priorities (structured data in agent.db)
 ├── MEMORY.md      Agent's curated long-term memory (agent-written)
 ├── agent.db       Per-agent SQLite: priorities, events, memory index
@@ -260,7 +349,7 @@ All data is SQLite (WAL mode):
 
 ```
 Shared (org-level):
-├── org-state.db     People, reporting hierarchy (temporal), resourcing audit,
+├── org-state.db     People table (source of truth for hierarchy via reports_to),
 │                    channels, messages, read_cursors, channel_members
 ├── audit.db         Invocation log: tokens, duration, summaries, action_summary
 └── orchestrator.db  Agent state: status, last_invocation, last_heartbeat, pid
@@ -268,6 +357,8 @@ Shared (org-level):
 Per-agent (in agent folder):
 └── agent.db         Priorities, events, memory index (chunks, FTS5, sqlite-vec)
 ```
+
+Events are stored in per-agent `agent.db` (no separate EVENTS.md file).
 
 **Org isolation**: Each org uses `{cwd}/data/` for shared DBs. Different directories = different databases = full isolation.
 
@@ -300,6 +391,7 @@ Messages are converted to events before activation — the agent sees all input 
 5. **Agent autonomy**: No agent modifies another agent's state. All influence through communication.
 6. **Gateway is dumb**: Gateway activates, records, indexes. Agent makes all decisions.
 7. **All agents use `hive chat send`** for communication (identity injected via `HIVE_AGENT_ID` and `HIVE_AGENT_NAME` env vars)
+8. **People table is source of truth**: Hierarchy lives in `org-state.db`, not directory structure
 
 ## Dependencies
 

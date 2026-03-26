@@ -116,9 +116,28 @@ export async function triageMessages(
     return createFallbackResults(messages, `claude exited with code ${result.exitCode}`);
   }
 
+  // Claude CLI with --output-format json wraps the response in an envelope:
+  // { "result": "<actual LLM text>", "usage": { ... } }
+  // We need to unwrap it before parsing the triage JSON.
+  let triageJson = result.stdout;
+  try {
+    const envelope = JSON.parse(triageJson);
+    if (envelope.result && typeof envelope.result === 'string') {
+      triageJson = envelope.result;
+    }
+  } catch {
+    // Not a JSON envelope — use raw stdout
+  }
+
+  // Strip markdown code fences that LLMs sometimes wrap around JSON
+  triageJson = triageJson.trim();
+  if (triageJson.startsWith('```')) {
+    triageJson = triageJson.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+  }
+
   let parsed: TriageBatchOutput;
   try {
-    parsed = parseTriageOutput(result.stdout);
+    parsed = parseTriageOutput(triageJson);
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'parse failed';
     return createFallbackResults(messages, reason);

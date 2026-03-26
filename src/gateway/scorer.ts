@@ -13,16 +13,16 @@ export function getHierarchyScore(
   // Super user always gets max authority
   if (senderId === 'super-user') return 10;
 
-  // Manager (parent) → highest authority
-  if (agent.parentId && senderId === agent.parentId) return 10;
+  // Manager (reportsTo) → highest authority
+  if (agent.reportsTo && senderId === agent.reportsTo.alias) return 10;
 
   // Direct report → moderate authority
-  if (agent.childIds.includes(senderId)) return 3;
+  if (agent.directReports.some(p => p.alias === senderId)) return 3;
 
-  // Peer detection: same parent
-  if (orgAgents && agent.parentId) {
+  // Peer detection: same reportsTo
+  if (orgAgents && agent.reportsTo) {
     const sender = orgAgents.get(senderId);
-    if (sender && sender.parentId === agent.parentId) return 5;
+    if (sender && sender.reportsTo?.alias === agent.reportsTo.alias) return 5;
   }
 
   return 1;
@@ -30,43 +30,14 @@ export function getHierarchyScore(
 
 /**
  * Compute channel priority weight.
- * #board=10, #incidents=9, #approvals=7, team=5, #leadership=4, #all-hands=3, unknown=2
+ * DMs get 8, groups get 5, unknown gets 2.
  */
 export function getChannelWeight(
   channel: string,
-  agent?: AgentConfig,
+  _agent?: AgentConfig,
 ): number {
-  const channelWeights: Record<string, number> = {
-    'board': 10,
-    'incidents': 9,
-    'approvals': 7,
-    'leadership': 4,
-    'all-hands': 3,
-  };
-
-  if (channelWeights[channel] !== undefined) return channelWeights[channel];
-
-  // Team channel detection: check if the channel name starts with or contains
-  // the agent's parent directory name (team prefix extracted from agent ID).
-  // e.g., agent "eng-1" with dir ".../engineering/eng-1" → parent dir "engineering"
-  //        matches channel "eng-backend" if channel starts with "eng"
-  // We use the longest non-numeric segment of the agent ID as the team prefix.
-  if (agent) {
-    // Extract team prefix: the agent ID prefix before any trailing numeric suffix
-    // e.g., "eng-1" → "eng", "vp-eng" → "vp-eng", "backend-eng-2" → "backend-eng"
-    const idParts = agent.id.split('-');
-    // Drop trailing numeric parts to get team prefix
-    while (idParts.length > 1 && /^\d+$/.test(idParts[idParts.length - 1])) {
-      idParts.pop();
-    }
-    const teamPrefix = idParts.join('-');
-    // Match if channel starts with or contains the team prefix (min 3 chars to avoid false positives)
-    if (teamPrefix.length >= 3 && (channel.startsWith(teamPrefix) || channel.includes(teamPrefix))) {
-      return 5;
-    }
-  }
-
-  return 2;
+  if (channel.startsWith('dm:')) return 8;
+  return 5;
 }
 
 /**
@@ -98,7 +69,7 @@ export function scoreMessage(
   const urgency = msg.metadata?.urgent ? 10 : 0;
   const channel = getChannelWeight(msg.channel, agent);
   const recency = computeRecencyDecay(msg.timestamp);
-  const mention = msg.mentions?.includes(agent.id) ? 10 : 0;
+  const mention = msg.mentions?.includes(agent.person.alias) ? 10 : 0;
 
   const raw = (authority * weights.authority)
     + (urgency * weights.urgency)

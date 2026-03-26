@@ -17,6 +17,8 @@ export class AuditLogger {
       model,
       tokensIn: result.tokensIn,
       tokensOut: result.tokensOut,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheCreationTokens: result.cacheCreationTokens,
       durationMs: result.durationMs,
       inputSummary: opts?.inputSummary,
       outputSummary: result.stdout.slice(0, 200), // First 200 chars as summary

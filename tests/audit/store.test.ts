@@ -45,6 +45,39 @@ describe('AuditStore', () => {
     expect(entries[0].durationMs).toBe(3000);
   });
 
+  it('logs cache token counts separately', () => {
+    store.logInvocation({
+      agentId: 'ceo',
+      invocationType: 'checkWork',
+      model: 'sonnet',
+      tokensIn: 1504,
+      tokensOut: 736,
+      cacheReadTokens: 1200,
+      cacheCreationTokens: 300,
+      durationMs: 5000,
+    });
+
+    const entries = store.getInvocations({ agentId: 'ceo' });
+    expect(entries.length).toBe(1);
+    expect(entries[0].tokensIn).toBe(1504);
+    expect(entries[0].tokensOut).toBe(736);
+    expect(entries[0].cacheReadTokens).toBe(1200);
+    expect(entries[0].cacheCreationTokens).toBe(300);
+  });
+
+  it('stores null for cache tokens when not provided', () => {
+    store.logInvocation({
+      agentId: 'eng-1',
+      invocationType: 'comms',
+      model: 'n/a',
+    });
+
+    const entries = store.getInvocations({ agentId: 'eng-1' });
+    expect(entries.length).toBe(1);
+    expect(entries[0].cacheReadTokens).toBeNull();
+    expect(entries[0].cacheCreationTokens).toBeNull();
+  });
+
   it('queries by agent and time range', () => {
     store.logInvocation({ agentId: 'ceo', invocationType: 'triage', model: 'haiku' });
     store.logInvocation({ agentId: 'eng-1', invocationType: 'main', model: 'sonnet' });

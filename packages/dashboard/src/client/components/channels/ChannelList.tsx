@@ -10,7 +10,7 @@ export function ChannelList({ selectedChannel, onSelectChannel }: ChannelListPro
   const { data: channels } = useApi<Channel[]>('/api/channels');
 
   return (
-    <div className="w-56 border-r border-slate-800 flex flex-col shrink-0">
+    <div className="w-full md:w-56 border-r border-slate-800 flex flex-col shrink-0">
       <div className="p-4 border-b border-slate-800">
         <h3 className="text-sm font-medium text-slate-300">Channels</h3>
       </div>
@@ -26,7 +26,7 @@ export function ChannelList({ selectedChannel, onSelectChannel }: ChannelListPro
             }`}
           >
             <span className="font-mono">#{ch.name}</span>
-            <span className="text-xs text-slate-600 ml-2">{ch.members.length}</span>
+            <span className="text-xs text-slate-600 ml-2">{ch.messageCount}</span>
           </button>
         ))}
         {channels?.length === 0 && (

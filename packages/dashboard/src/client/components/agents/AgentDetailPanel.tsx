@@ -16,7 +16,7 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
   const [tab, setTab] = useState<Tab>('state');
 
   if (!agent) return (
-    <div className="w-[400px] border-l border-slate-800 bg-slate-900 p-4 shrink-0">
+    <div className="w-full md:w-[400px] border-l border-slate-800 bg-slate-900 p-4 shrink-0">
       <p className="text-sm text-slate-500">Loading...</p>
     </div>
   );
@@ -28,7 +28,7 @@ export function AgentDetailPanel({ agentId, onClose }: AgentDetailPanelProps) {
   ];
 
   return (
-    <div className="w-[400px] border-l border-slate-800 bg-slate-900 flex flex-col shrink-0 overflow-hidden">
+    <div className="w-full md:w-[560px] border-l border-slate-800 bg-slate-900 flex flex-col shrink-0 overflow-hidden">
       <div className="p-4 border-b border-slate-800">
         <div className="flex items-center justify-between mb-1">
           <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-300">
@@ -135,6 +135,8 @@ function StateTab({ agent }: { agent: AgentDetail }) {
 }
 
 function FilesTab({ agent }: { agent: AgentDetail }) {
+  const [openFile, setOpenFile] = useState<string | null>('IDENTITY.md');
+
   const files = [
     { name: 'IDENTITY.md', content: agent.files.identity },
     { name: 'SOUL.md', content: agent.files.soul },
@@ -145,17 +147,28 @@ function FilesTab({ agent }: { agent: AgentDetail }) {
   ];
 
   return (
-    <div className="space-y-4">
-      {files.map(f => (
-        <div key={f.name}>
-          <h4 className="text-xs font-medium text-amber-500 font-mono mb-1">{f.name}</h4>
-          {f.content ? (
-            <AgentMdViewer content={f.content} />
-          ) : (
-            <p className="text-xs text-slate-600 italic">Empty</p>
-          )}
-        </div>
-      ))}
+    <div className="space-y-1">
+      {files.map(f => {
+        const isOpen = openFile === f.name;
+        const isEmpty = !f.content;
+        return (
+          <div key={f.name} className="border border-slate-800 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setOpenFile(isOpen ? null : f.name)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-800/50 transition-colors"
+            >
+              <span className="text-[10px] text-slate-600">{isOpen ? '▼' : '▶'}</span>
+              <span className="text-xs font-medium text-amber-500 font-mono">{f.name}</span>
+              {isEmpty && <span className="text-[10px] text-slate-600 italic ml-auto">empty</span>}
+            </button>
+            {isOpen && f.content && (
+              <div className="px-3 pb-3 border-t border-slate-800/50">
+                <AgentMdViewer content={f.content} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

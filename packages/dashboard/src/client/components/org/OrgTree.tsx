@@ -29,10 +29,10 @@ export function OrgTree({ org, agents, selectedAgentId, onSelectAgent }: OrgTree
         {children.length > 0 && (
           <>
             <div className="w-px h-6 bg-slate-700" />
-            <div className="flex gap-6 relative">
+            <div className="flex gap-3 md:gap-6 relative">
               {children.length > 1 && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px bg-slate-700" style={{
-                  width: `calc(100% - 140px)`,
+                  width: `calc(100% - 120px)`,
                 }} />
               )}
               {children.map(childId => (
@@ -49,7 +49,7 @@ export function OrgTree({ org, agents, selectedAgentId, onSelectAgent }: OrgTree
   }
 
   return (
-    <div className="flex justify-center py-8 overflow-auto">
+    <div className="flex justify-center py-4 md:py-8 overflow-x-auto">
       {renderNode(org.root)}
     </div>
   );

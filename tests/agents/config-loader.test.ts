@@ -1,29 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { loadAgentConfig } from '../../src/agents/config-loader.js';
+import { loadAgentFiles } from '../../src/agents/config-loader.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CEO_DIR = path.resolve(__dirname, '../fixtures/sample-org/ceo');
+const CEO_DIR = path.resolve(__dirname, '../fixtures/sample-org/1-ceo');
 
-describe('loadAgentConfig', () => {
+describe('loadAgentFiles', () => {
   it('loads identity frontmatter', async () => {
-    const config = await loadAgentConfig(CEO_DIR, 'ceo', 0, null);
-    expect(config.identity.name).toBe('Test CEO');
-    expect(config.identity.model).toBe('sonnet');
-    expect(config.identity.tools).toContain('Read');
+    const { identity } = await loadAgentFiles(CEO_DIR);
+    expect(identity.name).toBe('Test CEO');
+    expect(identity.model).toBe('sonnet');
   });
 
   it('loads all md file contents', async () => {
-    const config = await loadAgentConfig(CEO_DIR, 'ceo', 0, null);
-    expect(config.files.soul).toContain('Strategic thinker');
-    expect(config.files.bureau).toContain('Super User');
-    expect(config.files.priorities).toContain('Build initial org');
+    const { files } = await loadAgentFiles(CEO_DIR);
+    expect(files.soul).toContain('Strategic thinker');
+    expect(files.bureau).toContain('Super User');
+    expect(files.priorities).toContain('Build initial org');
   });
 
   it('handles missing optional files gracefully', async () => {
-    const config = await loadAgentConfig(CEO_DIR, 'ceo', 0, null);
+    const { files } = await loadAgentFiles(CEO_DIR);
     // MEMORY.md exists but even if it didn't, should return empty string
-    expect(typeof config.files.memory).toBe('string');
+    expect(typeof files.memory).toBe('string');
   });
 });

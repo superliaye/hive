@@ -18,7 +18,7 @@ export function createSystemRoutes(ctx: HiveContext): Router {
       running,
       pid: running ? pid : null,
       agentCount: ctx.orgChart.agents.size,
-      channelCount: ctx.orgChart.channels.length,
+      peopleCount: ctx.orgChart.people.length,
     });
   });
 

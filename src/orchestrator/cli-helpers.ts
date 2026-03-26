@@ -23,8 +23,8 @@ export function parseAgentScheduleType(agent: AgentConfig): ScheduleType {
     return 'on-demand';
   }
 
-  // CEO and VPs are persistent by default
-  if (agent.depth <= 1) {
+  // Top-level agents (no manager) are persistent by default
+  if (!agent.reportsTo) {
     return 'persistent';
   }
 

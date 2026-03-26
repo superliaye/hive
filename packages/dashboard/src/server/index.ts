@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Allow the dashboard to spawn claude CLI even when launched from within Claude Code
 delete process.env.CLAUDECODE;
 
-export async function createServer(opts: { port: number; cwd?: string }) {
+export async function createServer(opts: { port: number; host?: string; cwd?: string }) {
   const ctx = await HiveContext.create(opts.cwd);
   const eventBus = new HiveEventBus();
 
@@ -77,11 +77,31 @@ export async function createServer(opts: { port: number; cwd?: string }) {
     });
   }
 
-  const server = app.listen(opts.port, () => {
-    console.log(`Hive Dashboard running at http://localhost:${opts.port}`);
+  const host = opts.host ?? '0.0.0.0';
+  const server = app.listen(opts.port, host, () => {
+    console.log(`Hive Dashboard running at http://${host}:${opts.port}`);
+    if (host === '0.0.0.0') {
+      console.log(`  LAN: http://<your-ip>:${opts.port}`);
+    }
   });
 
+  // Periodic hot-reload: detect new agents every 30 seconds
+  let hotReloadTimer: ReturnType<typeof setInterval> | null = null;
+  if (daemon) {
+    hotReloadTimer = setInterval(async () => {
+      try {
+        const { added, removed } = await daemon!.hotReload();
+        if (added.length > 0 || removed.length > 0) {
+          console.log(`[dashboard] hot-reload: +${added.length} -${removed.length} agents`);
+        }
+      } catch (err) {
+        console.error('[dashboard] hot-reload error:', err);
+      }
+    }, 30_000);
+  }
+
   const shutdown = async () => {
+    if (hotReloadTimer) clearInterval(hotReloadTimer);
     sse.stop();
     if (daemon) {
       await daemon.stop();

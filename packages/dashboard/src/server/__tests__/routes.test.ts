@@ -3,6 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { HiveContext } from '../../../../../src/context.js';
 import { createApiRouter } from '../router.js';
@@ -14,6 +15,31 @@ const FIXTURE_ORG = path.resolve(__dirname, '../../../../../tests/fixtures/sampl
 let tempDir: string;
 let ctx: HiveContext;
 let app: express.Express;
+
+function seedPeople(dataDir: string): void {
+  fs.mkdirSync(dataDir, { recursive: true });
+  const db = new Database(path.join(dataDir, 'hive.db'));
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  // Create only the people table — ChatDb.init() will create the rest
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS people (
+      id INTEGER PRIMARY KEY,
+      alias TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      role_template TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      folder TEXT,
+      reports_to INTEGER REFERENCES people(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO people (id, alias, name, status, folder) VALUES (0, 'super-user', 'Super User', 'active', NULL);
+    INSERT INTO people (id, alias, name, role_template, status, folder) VALUES (1, 'ceo', 'Test CEO', 'Chief Executive Officer', 'active', '1-ceo');
+    INSERT INTO people (id, alias, name, role_template, status, folder, reports_to) VALUES (2, 'ar', 'AR', 'Agent Resources Manager', 'active', '2-ar', 1);
+    INSERT INTO people (id, alias, name, role_template, status, folder, reports_to) VALUES (3, 'eng-1', 'Engineer 1', 'Backend Software Engineer', 'active', '3-eng-1', 1);
+  `);
+  db.close();
+}
 
 async function request(path: string, opts?: RequestInit) {
   const server = app.listen(0);
@@ -31,11 +57,12 @@ describe('Dashboard API routes', () => {
   beforeEach(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-routes-'));
     fs.cpSync(FIXTURE_ORG, path.join(tempDir, 'org'), { recursive: true });
+    seedPeople(path.join(tempDir, 'data'));
     ctx = await HiveContext.create(tempDir);
 
     // Register agents in state store
-    for (const [id] of ctx.orgChart.agents) {
-      ctx.state.register(id);
+    for (const [alias] of ctx.orgChart.agents) {
+      ctx.state.register(alias);
     }
 
     const sse = new SSEManager(ctx);
@@ -52,11 +79,14 @@ describe('Dashboard API routes', () => {
   it('GET /api/org returns org chart', async () => {
     const { status, body } = await request('/api/org');
     expect(status).toBe(200);
-    expect(body).toHaveProperty('root');
     expect(body).toHaveProperty('agents');
-    expect(body).toHaveProperty('channels');
+    expect(body).toHaveProperty('people');
     expect(Array.isArray(body.agents)).toBe(true);
     expect(body.agents.length).toBeGreaterThan(0);
+    // New flat model: agents have alias, reportsTo, directReports
+    expect(body.agents[0]).toHaveProperty('alias');
+    expect(body.agents[0]).toHaveProperty('reportsTo');
+    expect(body.agents[0]).toHaveProperty('directReports');
   });
 
   it('GET /api/agents returns all agents with status', async () => {
@@ -64,23 +94,25 @@ describe('Dashboard API routes', () => {
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);
     expect(body.length).toBeGreaterThan(0);
-    expect(body[0]).toHaveProperty('id');
+    expect(body[0]).toHaveProperty('alias');
     expect(body[0]).toHaveProperty('status');
   });
 
-  it('GET /api/agents/:id returns agent detail', async () => {
-    const agentId = ctx.orgChart.root.id;
-    const { status, body } = await request(`/api/agents/${agentId}`);
+  it('GET /api/agents/:alias returns agent detail', async () => {
+    const alias = 'ceo';
+    const { status, body } = await request(`/api/agents/${alias}`);
     expect(status).toBe(200);
-    expect(body.id).toBe(agentId);
+    expect(body.alias).toBe(alias);
     expect(body).toHaveProperty('identity');
     expect(body).toHaveProperty('files');
     expect(body).toHaveProperty('state');
     expect(body).toHaveProperty('recentInvocations');
     expect(body).toHaveProperty('tokenTotals');
+    expect(body).toHaveProperty('reportsTo');
+    expect(body).toHaveProperty('directReports');
   });
 
-  it('GET /api/agents/:id returns 404 for unknown', async () => {
+  it('GET /api/agents/:alias returns 404 for unknown', async () => {
     const { status, body } = await request('/api/agents/nonexistent');
     expect(status).toBe(404);
     expect(body.error).toBe('Agent not found');
@@ -90,7 +122,6 @@ describe('Dashboard API routes', () => {
     const { status, body } = await request('/api/channels');
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThan(0);
   });
 
   it('GET /api/channels/:name/messages returns messages array', async () => {

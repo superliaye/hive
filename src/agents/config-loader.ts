@@ -1,22 +1,13 @@
-import type { AgentConfig } from '../types.js';
+import type { AgentConfig, AgentIdentity } from '../types.js';
 import { readAgentFiles, parseIdentityFrontmatter } from '../org/parser.js';
 
-export async function loadAgentConfig(
-  dir: string,
-  id: string,
-  depth: number,
-  parentId: string | null,
-): Promise<AgentConfig> {
-  const files = await readAgentFiles(dir);
-  const identity = parseIdentityFrontmatter(files.identity);
+export interface LoadedAgentFiles {
+  files: AgentConfig['files'];
+  identity: AgentIdentity;
+}
 
-  return {
-    id,
-    identity,
-    dir,
-    depth,
-    parentId,
-    childIds: [],
-    files,
-  };
+export async function loadAgentFiles(dir: string, sharedProtocols?: string): Promise<LoadedAgentFiles> {
+  const files = await readAgentFiles(dir, sharedProtocols);
+  const identity = parseIdentityFrontmatter(files.identity);
+  return { files, identity };
 }

@@ -5,23 +5,22 @@ import { readAgentFiles } from '../../../../../src/org/parser.js';
 export function createOrgRoutes(ctx: HiveContext): Router {
   const router = Router();
 
-  // GET /api/org — full org chart tree
+  // GET /api/org — full org chart
   router.get('/', (_req, res) => {
     const { orgChart } = ctx;
     const agents = Array.from(orgChart.agents.values()).map(a => ({
-      id: a.id,
-      name: a.identity.name,
+      alias: a.person.alias,
+      id: a.person.id,
+      name: a.person.name,
       role: a.identity.role,
       emoji: a.identity.emoji,
       model: a.identity.model,
-      depth: a.depth,
-      parentId: a.parentId,
-      childIds: a.childIds,
+      reportsTo: a.reportsTo?.alias ?? null,
+      directReports: a.directReports.map(p => p.alias),
     }));
     res.json({
-      root: orgChart.root.id,
       agents,
-      channels: orgChart.channels,
+      people: orgChart.people,
     });
   });
 
@@ -35,45 +34,47 @@ export function createAgentRoutes(ctx: HiveContext): Router {
   router.get('/', (_req, res) => {
     const states = ctx.state.listAll();
     const agents = Array.from(ctx.orgChart.agents.values()).map(a => {
-      const state = states.find(s => s.agentId === a.id);
+      const state = states.find(s => s.agentId === a.person.alias);
       return {
-        id: a.id,
-        name: a.identity.name,
+        alias: a.person.alias,
+        id: a.person.id,
+        name: a.person.name,
         role: a.identity.role,
         emoji: a.identity.emoji,
         model: a.identity.model,
         status: state?.status ?? 'idle',
         lastHeartbeat: state?.lastHeartbeat,
+        lastInvocation: state?.lastInvocation,
         currentTask: state?.currentTask,
       };
     });
     res.json(agents);
   });
 
-  // GET /api/agents/:id — single agent detail with live files
-  router.get('/:id', async (req, res) => {
-    const agent = ctx.orgChart.agents.get(req.params.id);
+  // GET /api/agents/:alias — single agent detail with live files
+  router.get('/:alias', async (req, res) => {
+    const agent = ctx.orgChart.agents.get(req.params.alias);
     if (!agent) {
       res.status(404).json({ error: 'Agent not found' });
       return;
     }
 
-    const state = ctx.state.get(req.params.id);
+    const state = ctx.state.get(req.params.alias);
     const freshFiles = await readAgentFiles(agent.dir);
     const recentInvocations = ctx.audit.getInvocations({
-      agentId: req.params.id,
+      agentId: req.params.alias,
       limit: 20,
     });
-    const tokenTotals = ctx.audit.getTokenTotals(req.params.id);
+    const tokenTotals = ctx.audit.getTokenTotals(req.params.alias);
 
     res.json({
-      id: agent.id,
+      alias: agent.person.alias,
+      id: agent.person.id,
       identity: agent.identity,
-      depth: agent.depth,
-      parentId: agent.parentId,
-      childIds: agent.childIds,
+      reportsTo: agent.reportsTo?.alias ?? null,
+      directReports: agent.directReports.map(p => p.alias),
       dir: agent.dir,
-      state: state ?? { agentId: agent.id, status: 'idle' },
+      state: state ?? { agentId: agent.person.alias, status: 'idle' },
       files: freshFiles,
       recentInvocations,
       tokenTotals,

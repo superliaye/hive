@@ -1,6 +1,13 @@
 import Database from 'better-sqlite3';
 import type { AgentState } from '../types.js';
 
+/** SQLite CURRENT_TIMESTAMP stores UTC but without a Z suffix.
+ *  `new Date("YYYY-MM-DD HH:MM:SS")` treats it as local time.
+ *  Append Z to force UTC interpretation. */
+function parseUtcDatetime(value: string): Date {
+  return new Date(value.replace(' ', 'T') + 'Z');
+}
+
 export class AgentStateStore {
   private db: Database.Database;
 
@@ -35,8 +42,8 @@ export class AgentStateStore {
     return {
       agentId: row.agent_id,
       status: row.status,
-      lastInvocation: row.last_invocation ? new Date(row.last_invocation) : undefined,
-      lastHeartbeat: row.last_heartbeat ? new Date(row.last_heartbeat) : undefined,
+      lastInvocation: row.last_invocation ? parseUtcDatetime(row.last_invocation) : undefined,
+      lastHeartbeat: row.last_heartbeat ? parseUtcDatetime(row.last_heartbeat) : undefined,
       currentTask: row.current_task ?? undefined,
       pid: row.pid ?? undefined,
     };
@@ -47,11 +54,20 @@ export class AgentStateStore {
     status: AgentState['status'],
     opts?: { pid?: number; currentTask?: string },
   ): void {
-    this.db.prepare(`
-      UPDATE agent_state
-      SET status = ?, pid = ?, current_task = ?, last_invocation = CURRENT_TIMESTAMP
-      WHERE agent_id = ?
-    `).run(status, opts?.pid ?? null, opts?.currentTask ?? null, agentId);
+    if (status === 'working') {
+      // Only update last_invocation when agent starts working
+      this.db.prepare(`
+        UPDATE agent_state
+        SET status = ?, pid = ?, current_task = ?, last_invocation = CURRENT_TIMESTAMP
+        WHERE agent_id = ?
+      `).run(status, opts?.pid ?? null, opts?.currentTask ?? null, agentId);
+    } else {
+      this.db.prepare(`
+        UPDATE agent_state
+        SET status = ?, pid = ?, current_task = ?
+        WHERE agent_id = ?
+      `).run(status, opts?.pid ?? null, opts?.currentTask ?? null, agentId);
+    }
   }
 
   markHeartbeat(agentId: string): void {
@@ -87,8 +103,8 @@ export class AgentStateStore {
     return (this.db.prepare('SELECT * FROM agent_state').all() as any[]).map((row) => ({
       agentId: row.agent_id,
       status: row.status,
-      lastInvocation: row.last_invocation ? new Date(row.last_invocation) : undefined,
-      lastHeartbeat: row.last_heartbeat ? new Date(row.last_heartbeat) : undefined,
+      lastInvocation: row.last_invocation ? parseUtcDatetime(row.last_invocation) : undefined,
+      lastHeartbeat: row.last_heartbeat ? parseUtcDatetime(row.last_heartbeat) : undefined,
       currentTask: row.current_task ?? undefined,
       pid: row.pid ?? undefined,
     }));

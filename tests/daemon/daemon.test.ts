@@ -33,7 +33,7 @@ function makeOrgChart(): OrgChart {
     depth: 0,
     parentId: null,
     childIds: [],
-    files: { identity: '', soul: '', bureau: '## Direct Channels\n- #board — immediate', priorities: '', routine: '', memory: '' },
+    files: { identity: '', soul: '', bureau: '## Direct Channels\n- #board — immediate', priorities: '', routine: '', memory: '', protocols: '' },
   };
 
   return {
@@ -70,12 +70,22 @@ describe('Daemon', () => {
     const orgChart = makeOrgChart();
     const channelManager = new ChannelManager(comms);
 
+    // Mock memory manager
+    const memory = {
+      indexAll: vi.fn(async () => {}),
+      search: vi.fn(async () => []),
+      indexAgent: vi.fn(async () => ({ indexed: 0, skipped: 0, chunks: 0 })),
+      getStore: vi.fn(),
+      close: vi.fn(),
+    } as any;
+
     return new Daemon({
       orgChart,
       comms,
       audit,
       state: stateStore,
       channelManager,
+      memory,
       dataDir: tmpDir,
       orgDir: path.join(tmpDir, 'org'),
       pidFilePath: path.join(tmpDir, 'hive.pid'),

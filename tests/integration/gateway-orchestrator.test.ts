@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import type { AgentConfig, OrgChart } from '../../src/types.js';
+import type { AgentConfig, OrgChart, Person } from '../../src/types.js';
 
 // Mock Claude CLI — the only external dependency
 vi.mock('../../src/agents/spawner.js', () => ({
@@ -22,21 +22,28 @@ import { spawnClaude } from '../../src/agents/spawner.js';
 
 const mockSpawnClaude = vi.mocked(spawnClaude);
 
-function makeAgent(id: string, overrides: Partial<AgentConfig> = {}): AgentConfig {
+const ceoPerson: Person = { id: 1, alias: 'ceo', name: 'CEO', status: 'active', folder: '1-ceo' };
+const vpEngPerson: Person = { id: 2, alias: 'vp-eng', name: 'VP Engineering', status: 'active', folder: '2-vp-eng', reportsTo: 1 };
+
+function makeAgent(alias: string, overrides: Partial<AgentConfig> = {}): AgentConfig {
+  const isRoot = alias === 'ceo';
+  const person: Person = isRoot
+    ? ceoPerson
+    : { id: 3, alias, name: alias, status: 'active', folder: `3-${alias}`, reportsTo: 1 };
   return {
-    id,
-    identity: { name: id, role: 'Engineer', model: 'sonnet', tools: ['Read', 'Write'] },
-    dir: `/tmp/org/${id}`,
-    depth: id === 'ceo' ? 0 : 1,
-    parentId: id === 'ceo' ? null : 'ceo',
-    childIds: [],
+    person,
+    identity: { name: alias, role: 'Engineer', model: 'sonnet' },
+    dir: `/tmp/org/${person.folder}`,
+    reportsTo: isRoot ? null : ceoPerson,
+    directReports: [],
     files: {
-      identity: `---\nname: ${id}\nrole: Engineer\nmodel: sonnet\ntools: [Read, Write]\n---`,
+      identity: `---\nname: ${alias}\nrole: Engineer\nmodel: sonnet\n---`,
       soul: '# Soul',
       bureau: '# Bureau\nReports to: CEO',
       priorities: '# Priorities\n## Backlog',
       routine: '# Routine',
       memory: '# Memory',
+      protocols: '',
     },
     ...overrides,
   };
@@ -59,7 +66,9 @@ describe('Gateway + Orchestrator Integration', () => {
 
   describe('End-to-end scoring + triage + heartbeat', () => {
     it('processes a batch of messages through the full pipeline', async () => {
-      const agent = makeAgent('eng-1', { parentId: 'vp-eng' });
+      const agent = makeAgent('eng-1', {
+        reportsTo: vpEngPerson,
+      });
       stateStore.register('eng-1');
 
       // Stage 1: Score messages

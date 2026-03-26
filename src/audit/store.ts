@@ -7,9 +7,12 @@ export interface LogInvocationOpts {
   model: string;
   tokensIn?: number;
   tokensOut?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   durationMs?: number;
   inputSummary?: string;
   outputSummary?: string;
+  actionSummary?: string;
   channel?: string;
 }
 
@@ -20,9 +23,12 @@ export interface InvocationRow {
   model: string;
   tokensIn: number | null;
   tokensOut: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
   durationMs: number | null;
   inputSummary: string | null;
   outputSummary: string | null;
+  actionSummary: string | null;
   channel: string | null;
   timestamp: string;
 }
@@ -35,9 +41,12 @@ function mapInvocationRow(row: any): InvocationRow {
     model: row.model,
     tokensIn: row.tokens_in ?? null,
     tokensOut: row.tokens_out ?? null,
+    cacheReadTokens: row.cache_read_tokens ?? null,
+    cacheCreationTokens: row.cache_creation_tokens ?? null,
     durationMs: row.duration_ms ?? null,
     inputSummary: row.input_summary ?? null,
     outputSummary: row.output_summary ?? null,
+    actionSummary: row.action_summary ?? null,
     channel: row.channel ?? null,
     timestamp: row.timestamp,
   };
@@ -61,28 +70,46 @@ export class AuditStore {
         model TEXT NOT NULL,
         tokens_in INTEGER,
         tokens_out INTEGER,
+        cache_read_tokens INTEGER,
+        cache_creation_tokens INTEGER,
         duration_ms INTEGER,
         input_summary TEXT,
         output_summary TEXT,
+        action_summary TEXT,
         channel TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_invocations_agent ON invocations(agent_id);
       CREATE INDEX IF NOT EXISTS idx_invocations_ts ON invocations(timestamp);
     `);
+    // Add columns if upgrading from older schema
+    const alterColumns = [
+      'ALTER TABLE invocations ADD COLUMN action_summary TEXT',
+      'ALTER TABLE invocations ADD COLUMN cache_read_tokens INTEGER',
+      'ALTER TABLE invocations ADD COLUMN cache_creation_tokens INTEGER',
+    ];
+    for (const sql of alterColumns) {
+      try { this.db.exec(sql); } catch { /* Column already exists */ }
+    }
   }
 
   logInvocation(opts: LogInvocationOpts): string {
     const id = randomUUID();
     this.db.prepare(`
-      INSERT INTO invocations (id, agent_id, invocation_type, model, tokens_in, tokens_out, duration_ms, input_summary, output_summary, channel)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO invocations (id, agent_id, invocation_type, model, tokens_in, tokens_out, cache_read_tokens, cache_creation_tokens, duration_ms, input_summary, output_summary, action_summary, channel)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, opts.agentId, opts.invocationType, opts.model,
-      opts.tokensIn ?? null, opts.tokensOut ?? null, opts.durationMs ?? null,
-      opts.inputSummary ?? null, opts.outputSummary ?? null, opts.channel ?? null,
+      opts.tokensIn ?? null, opts.tokensOut ?? null,
+      opts.cacheReadTokens ?? null, opts.cacheCreationTokens ?? null,
+      opts.durationMs ?? null,
+      opts.inputSummary ?? null, opts.outputSummary ?? null, opts.actionSummary ?? null, opts.channel ?? null,
     );
     return id;
+  }
+
+  updateActionSummary(invocationId: string, actionSummary: string): void {
+    this.db.prepare('UPDATE invocations SET action_summary = ? WHERE id = ?').run(actionSummary, invocationId);
   }
 
   getInvocations(filter: { agentId?: string; invocationType?: string; since?: Date; limit?: number }): InvocationRow[] {

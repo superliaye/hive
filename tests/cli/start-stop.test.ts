@@ -24,10 +24,16 @@ vi.mock('../../src/orchestrator/orchestrator.js', () => {
 
 // Mock the org parser
 vi.mock('../../src/org/parser.js', () => ({
-  parseOrgTree: vi.fn(async () => ({
-    root: { id: 'ceo', identity: { name: 'CEO' }, childIds: [] },
-    agents: new Map([['ceo', { id: 'ceo', identity: { name: 'CEO' }, childIds: [], files: { routine: '' } }]]),
-    channels: [],
+  parseOrgFlat: vi.fn(async () => ({
+    agents: new Map([['ceo', {
+      person: { id: 1, alias: 'ceo', name: 'CEO', status: 'active' },
+      dir: '/tmp/org/1-ceo',
+      reportsTo: null,
+      directReports: [],
+      files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '' },
+      identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
+    }]]),
+    people: [{ id: 1, alias: 'ceo', name: 'CEO', status: 'active' }],
   })),
 }));
 
@@ -48,43 +54,48 @@ import {
 
 describe('CLI Helpers', () => {
   describe('parseAgentScheduleType', () => {
-    it('classifies CEO as persistent', () => {
+    it('classifies CEO (no reportsTo) as persistent', () => {
       expect(parseAgentScheduleType({
-        id: 'ceo',
-        depth: 0,
-        files: { routine: '## Heartbeat (every 10min)\nCheck #board' },
+        person: { id: 1, alias: 'ceo', name: 'CEO', status: 'active' as const },
+        reportsTo: null,
+        directReports: [],
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '## Heartbeat (every 10min)\nCheck #board', memory: '', protocols: '' },
+        identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
+        dir: '/tmp/org/1-ceo',
       } as any)).toBe('persistent');
     });
 
-    it('classifies depth-0 agents as persistent by default', () => {
+    it('classifies agents with no reportsTo as persistent by default', () => {
       expect(parseAgentScheduleType({
-        id: 'ceo',
-        depth: 0,
-        files: { routine: '' },
+        person: { id: 1, alias: 'ceo', name: 'CEO', status: 'active' as const },
+        reportsTo: null,
+        directReports: [],
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '' },
+        identity: { name: 'CEO', role: 'CEO', model: 'sonnet' },
+        dir: '/tmp/org/1-ceo',
       } as any)).toBe('persistent');
     });
 
-    it('classifies depth-1 agents as persistent (VPs)', () => {
+    it('classifies agents with reportsTo as on-demand by default', () => {
+      const manager = { id: 1, alias: 'ceo', name: 'CEO', status: 'active' as const };
       expect(parseAgentScheduleType({
-        id: 'vp-eng',
-        depth: 1,
-        files: { routine: '' },
-      } as any)).toBe('persistent');
-    });
-
-    it('classifies deep agents as on-demand', () => {
-      expect(parseAgentScheduleType({
-        id: 'eng-1',
-        depth: 2,
-        files: { routine: '' },
+        person: { id: 3, alias: 'eng-1', name: 'Engineer 1', status: 'active' as const, reportsTo: 1 },
+        reportsTo: manager,
+        directReports: [],
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', protocols: '' },
+        identity: { name: 'Engineer 1', role: 'Backend Software Engineer', model: 'sonnet' },
+        dir: '/tmp/org/3-eng-1',
       } as any)).toBe('on-demand');
     });
 
     it('classifies agents with explicit on-demand routine as on-demand', () => {
       expect(parseAgentScheduleType({
-        id: 'eng-1',
-        depth: 1,
-        files: { routine: '## Schedule\nType: on-demand' },
+        person: { id: 2, alias: 'ar', name: 'AR', status: 'active' as const, reportsTo: 1 },
+        reportsTo: null,
+        directReports: [],
+        files: { identity: '', soul: '', bureau: '', priorities: '', routine: '## Schedule\nType: on-demand', memory: '', protocols: '' },
+        identity: { name: 'AR', role: 'Agent Resources Manager', model: 'sonnet' },
+        dir: '/tmp/org/2-ar',
       } as any)).toBe('on-demand');
     });
   });

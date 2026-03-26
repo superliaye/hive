@@ -125,10 +125,10 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
   const { agent, stateStore } = ctx;
 
   // Concurrency guard: one invocation per agent at a time
-  const currentState = stateStore.get(agent.id);
+  const currentState = stateStore.get(agent.person.alias);
   if (currentState?.status === 'working') {
     return {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       messagesProcessed: 0,
       actNowCount: 0,
       queueCount: 0,
@@ -137,20 +137,20 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
       workPerformed: false,
       durationMs: Date.now() - start,
       skipped: true,
-      skipReason: `Agent ${agent.id} is already working (PID: ${currentState.pid})`,
+      skipReason: `Agent ${agent.person.alias} is already working (PID: ${currentState.pid})`,
     };
   }
 
   // Mark heartbeat timestamp
-  stateStore.markHeartbeat(agent.id);
+  stateStore.markHeartbeat(agent.person.alias);
 
   try {
     // Step 1: Fetch unread messages
-    const unread = await ctx.getUnread(agent.id);
+    const unread = await ctx.getUnread(agent.person.alias);
 
     if (unread.length === 0) {
       return {
-        agentId: agent.id,
+        agentId: agent.person.alias,
         messagesProcessed: 0,
         actNowCount: 0,
         queueCount: 0,
@@ -167,7 +167,7 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
 
     // Step 3: Stage 2 — LLM triage
     const triageResults = await triageMessages(ranked, {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       agentDir: agent.dir,
       priorities: agent.files.priorities,
       bureau: agent.files.bureau,
@@ -181,7 +181,7 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
 
     // Process IGNORE — mark as read immediately
     if (ignore.length > 0) {
-      await ctx.markRead(agent.id, ignore.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, ignore.map(r => r.messageId));
     }
 
     // Process NOTE — append to memory, then mark as read
@@ -189,11 +189,11 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
       const msg = ranked.find(m => m.messageId === noteResult.messageId);
       if (msg) {
         const entry = `- [${msg.timestamp.toISOString()}] @${msg.sender} in #${msg.channel}: ${msg.content.slice(0, 200)}`;
-        await ctx.appendToMemory(agent.id, entry);
+        await ctx.appendToMemory(agent.person.alias, entry);
       }
     }
     if (note.length > 0) {
-      await ctx.markRead(agent.id, note.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, note.map(r => r.messageId));
     }
 
     // Process QUEUE — append to priorities, then mark as read
@@ -201,17 +201,17 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
       const msg = ranked.find(m => m.messageId === queueResult.messageId);
       if (msg) {
         const entry = `- [QUEUED] ${msg.content.slice(0, 200)} (from @${msg.sender} in #${msg.channel})`;
-        await ctx.appendToPriorities(agent.id, entry);
+        await ctx.appendToPriorities(agent.person.alias, entry);
       }
     }
     if (queue.length > 0) {
-      await ctx.markRead(agent.id, queue.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, queue.map(r => r.messageId));
     }
 
     // Process ACT_NOW — invoke Claude CLI for main work
     let workPerformed = false;
     if (actNow.length > 0) {
-      stateStore.updateStatus(agent.id, 'working', { pid: process.pid, currentTask: `Processing ${actNow.length} urgent message(s)` });
+      stateStore.updateStatus(agent.person.alias, 'working', { pid: process.pid, currentTask: `Processing ${actNow.length} urgent message(s)` });
 
       try {
         const systemPrompt = assemblePrompt(agent);
@@ -220,7 +220,6 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
         const args = buildClaudeArgs({
           model: agent.identity.model,
           systemPrompt,
-          tools: agent.identity.tools,
         });
 
         const workResult = await spawnClaude(args, {
@@ -247,7 +246,7 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
             // Use the thread of the first message in the channel, if any
             const thread = msgs[0].thread;
             await ctx.postMessage(
-              agent.id,
+              agent.person.alias,
               channel,
               workResult.stdout.trim(),
               thread ? { thread } : undefined,
@@ -258,9 +257,9 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
         workPerformed = true;
       } catch (err) {
         // Main work failed — set agent back to idle and report error
-        stateStore.updateStatus(agent.id, 'idle');
+        stateStore.updateStatus(agent.person.alias, 'idle');
         return {
-          agentId: agent.id,
+          agentId: agent.person.alias,
           messagesProcessed: unread.length,
           actNowCount: actNow.length,
           queueCount: queue.length,
@@ -273,14 +272,14 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
       }
 
       // Mark ACT_NOW messages as read after processing
-      await ctx.markRead(agent.id, actNow.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, actNow.map(r => r.messageId));
     }
 
     // Return to idle state
-    stateStore.updateStatus(agent.id, 'idle');
+    stateStore.updateStatus(agent.person.alias, 'idle');
 
     return {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       messagesProcessed: unread.length,
       actNowCount: actNow.length,
       queueCount: queue.length,
@@ -291,9 +290,9 @@ export async function runHeartbeat(ctx: HeartbeatContext): Promise<HeartbeatResu
     };
   } catch (err) {
     // Catch-all: ensure agent doesn't stay stuck in working state
-    stateStore.updateStatus(agent.id, 'idle');
+    stateStore.updateStatus(agent.person.alias, 'idle');
     return {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       messagesProcessed: 0,
       actNowCount: 0,
       queueCount: 0,

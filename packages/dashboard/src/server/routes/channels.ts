@@ -4,13 +4,20 @@ import type { HiveContext } from '../../../../../src/context.js';
 export function createChannelRoutes(ctx: HiveContext): Router {
   const router = Router();
 
-  // GET /api/channels — list all channels
+  // GET /api/channels — list all channels with message counts
   router.get('/', async (_req, res) => {
     const channels = await ctx.comms.listChannels();
-    res.json(channels.map(ch => ({
-      ...ch,
-      createdAt: ch.createdAt.toISOString(),
-    })));
+    const channelsWithCounts = await Promise.all(
+      channels.map(async (ch) => {
+        const messages = await ctx.comms.readChannel(ch.name);
+        return {
+          ...ch,
+          createdAt: ch.createdAt.toISOString(),
+          messageCount: messages.length,
+        };
+      }),
+    );
+    res.json(channelsWithCounts);
   });
 
   // GET /api/channels/:name/messages

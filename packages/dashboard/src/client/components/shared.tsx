@@ -38,7 +38,14 @@ export function StatusDot({ status }: { status: string }) {
 
 export function timeAgo(dateStr: string | undefined): string {
   if (!dateStr) return 'never';
-  const ms = Math.max(0, Date.now() - new Date(dateStr).getTime());
+  // Handle SQLite datetime format "YYYY-MM-DD HH:MM:SS" (no T, no Z — treat as UTC)
+  let normalized = dateStr;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(normalized)) {
+    normalized = normalized.replace(' ', 'T') + 'Z';
+  }
+  const ts = new Date(normalized).getTime();
+  if (isNaN(ts)) return 'unknown';
+  const ms = Math.max(0, Date.now() - ts);
   const s = Math.floor(ms / 1000);
   if (s < 60) return s === 0 ? 'just now' : `${s}s ago`;
   const m = Math.floor(s / 60);

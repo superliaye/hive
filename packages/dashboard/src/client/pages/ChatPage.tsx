@@ -47,8 +47,8 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex flex-col h-full -m-6">
-      <div className="border-b border-slate-800 px-6 py-3 shrink-0">
+    <div className="flex flex-col h-full -m-3 md:-m-6">
+      <div className="border-b border-slate-800 px-4 md:px-6 py-3 shrink-0">
         <h2 className="text-lg font-medium text-slate-200">CEO Chat</h2>
         <p className="text-xs text-slate-500 font-mono">#board</p>
       </div>

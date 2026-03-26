@@ -37,21 +37,32 @@ const mockSpawnClaude = vi.mocked(spawnClaude);
 const mockTriageMessages = vi.mocked(triageMessages);
 const mockRankMessages = vi.mocked(rankMessages);
 
-function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
+function makePerson(alias: string, overrides: Partial<import('../../src/types.js').Person> = {}): import('../../src/types.js').Person {
   return {
-    id: 'eng-1',
-    identity: { name: 'Engineer 1', role: 'Backend Engineer', model: 'sonnet', tools: ['Read', 'Write'] },
-    dir: '/tmp/org/ceo/engineering/eng-1',
-    depth: 2,
-    parentId: 'vp-eng',
-    childIds: [],
+    id: 1,
+    alias,
+    name: alias.toUpperCase(),
+    status: 'active' as const,
+    ...overrides,
+  };
+}
+
+function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
+  const person = overrides.person ?? makePerson('eng-1', { id: 2 });
+  return {
+    person,
+    identity: { name: 'Engineer 1', role: 'Backend Engineer', model: 'sonnet' },
+    dir: '/tmp/org/2-eng-1',
+    reportsTo: makePerson('vp-eng', { id: 3 }),
+    directReports: [],
     files: {
-      identity: '---\nname: Engineer 1\nrole: Backend Engineer\nmodel: sonnet\ntools: [Read, Write]\n---\n# Identity',
+      identity: '---\nname: Engineer 1\nrole: Backend Engineer\nmodel: sonnet\n---\n# Identity',
       soul: '# Soul\nPragmatic.',
       bureau: '# Bureau\nReports to: VP Eng',
       priorities: '# Priorities\n1. Build API',
       routine: '# Routine\nHeartbeat every 30min',
       memory: '# Memory',
+      protocols: '',
     },
     ...overrides,
   };

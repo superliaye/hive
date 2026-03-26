@@ -18,11 +18,13 @@ If any of these are missing, DM CEO with specific clarification questions. Do NO
 
 ### 1. Determine directory path
 
-Follow the reporting chain. Agent directories nest under their manager:
+Agents live in a flat structure under `org/` with `{id}-{alias}/` naming:
 ```
-org/ceo/                          # CEO reports to super-user
-org/ceo/engineering/              # Engineering lead reports to CEO
-org/ceo/engineering/platform-eng/ # Engineer reports to engineering lead
+org/1-ceo/            # CEO
+org/2-ar/             # AR
+org/3-platform-eng/   # Platform Engineer
+org/4-qa-eng/         # QA Engineer
+org/5-product-analyst/ # Product Analyst
 ```
 
 ### 2. Create the directory and write all files

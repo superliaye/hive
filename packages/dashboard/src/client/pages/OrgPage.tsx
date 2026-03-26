@@ -20,8 +20,9 @@ export function OrgPage() {
   if (!org || !agents) return <EmptyState message="Loading organization..." />;
 
   return (
-    <div className="flex h-full -m-6">
-      <div className="flex-1 overflow-auto p-6">
+    <div className="flex flex-col md:flex-row h-full -m-3 md:-m-6">
+      {/* Tree view: hidden on mobile when detail panel is open */}
+      <div className={`flex-1 overflow-auto p-3 md:p-6 ${selectedAgentId ? 'hidden md:block' : ''}`}>
         <h2 className="text-lg font-medium text-slate-200 mb-4">Organization</h2>
         <OrgTree
           org={org}

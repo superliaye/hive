@@ -8,9 +8,30 @@ import { AgentStateStore } from '../../src/state/agent-state.js';
 import { SqliteCommsProvider } from '../../src/comms/sqlite-provider.js';
 import { AuditStore } from '../../src/audit/store.js';
 import { ChannelManager } from '../../src/comms/channel-manager.js';
-import { parseOrgTree } from '../../src/org/parser.js';
+import { parseOrgFlat } from '../../src/org/parser.js';
+import type { Person } from '../../src/types.js';
+
+function mockMemory() {
+  return {
+    indexAll: vi.fn(async () => {}),
+    search: vi.fn(async () => []),
+    indexAgent: vi.fn(async () => ({ indexed: 0, skipped: 0, chunks: 0 })),
+    getStore: vi.fn(),
+    close: vi.fn(),
+  } as any;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** People records matching the sample-org fixture folders (1-ceo, 2-ar, 3-eng-1). */
+function fixturePeople(): Person[] {
+  return [
+    { id: 0, alias: 'super-user', name: 'Super User', status: 'active' },
+    { id: 1, alias: 'ceo', name: 'Test CEO', roleTemplate: 'CEO', status: 'active', folder: '1-ceo' },
+    { id: 2, alias: 'ar', name: 'AR Agent', roleTemplate: 'Agent Resources Manager', status: 'active', folder: '2-ar', reportsTo: 1 },
+    { id: 3, alias: 'eng-1', name: 'Engineer 1', roleTemplate: 'Engineer', status: 'active', folder: '3-eng-1', reportsTo: 1 },
+  ];
+}
 
 // Mock Claude CLI — we don't want real LLM calls in tests
 vi.mock('../../src/agents/spawner.js', () => ({
@@ -61,10 +82,13 @@ describe('Daemon Integration', () => {
 
   it('direct channel triggers CEO response when message posted to #board', async () => {
     const fixtureOrg = path.resolve(__dirname, '../fixtures/sample-org');
-    const orgChart = await parseOrgTree(fixtureOrg);
+    const people = fixturePeople();
+    const orgChart = await parseOrgFlat(fixtureOrg, people);
 
     const channelManager = new ChannelManager(comms);
-    await channelManager.syncFromOrgTree(orgChart);
+
+    // Ensure #board channel exists so we can post to it
+    await channelManager.ensureChannel('board', ['super-user', 'ceo']);
 
     const daemon = new Daemon({
       orgChart,
@@ -72,11 +96,13 @@ describe('Daemon Integration', () => {
       audit,
       state: stateStore,
       channelManager,
+      memory: mockMemory(),
       dataDir: tmpDir,
       orgDir: fixtureOrg,
       pidFilePath: path.join(tmpDir, 'hive.pid'),
       tickIntervalMs: 600_000,
       coalesceMs: 50,
+      loadPeople: () => people,
     });
 
     await daemon.start();
@@ -100,10 +126,13 @@ describe('Daemon Integration', () => {
 
   it('periodic tick processes inbox without direct channel signal', async () => {
     const fixtureOrg = path.resolve(__dirname, '../fixtures/sample-org');
-    const orgChart = await parseOrgTree(fixtureOrg);
+    const people = fixturePeople();
+    const orgChart = await parseOrgFlat(fixtureOrg, people);
 
     const channelManager = new ChannelManager(comms);
-    await channelManager.syncFromOrgTree(orgChart);
+
+    // Ensure #board channel exists
+    await channelManager.ensureChannel('board', ['super-user', 'ceo']);
 
     const daemon = new Daemon({
       orgChart,
@@ -111,11 +140,13 @@ describe('Daemon Integration', () => {
       audit,
       state: stateStore,
       channelManager,
+      memory: mockMemory(),
       dataDir: tmpDir,
       orgDir: fixtureOrg,
       pidFilePath: path.join(tmpDir, 'hive.pid'),
       tickIntervalMs: 600_000,
       coalesceMs: 50,
+      loadPeople: () => people,
     });
 
     await daemon.start();

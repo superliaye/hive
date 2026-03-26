@@ -127,7 +127,7 @@ function summarizeAction(
  * 3. If empty → return (ZERO LLM calls)
  * 4. Score deterministically
  * 5. Triage via LLM (haiku) → classify ACT_NOW / NOTE / IGNORE
- *    - Override: super-user on #board → always ACT_NOW
+ *    - Override: super-user messages → always ACT_NOW
  * 6. Process NOTE → append to memory file, mark read
  * 7. Process IGNORE → mark read
  * 8. If any ACT_NOW → set state=working → spawn main agent → log to audit → set state=idle
@@ -137,32 +137,32 @@ function summarizeAction(
 export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult> {
   const start = Date.now();
   const { agent, stateStore } = ctx;
-  const log = (msg: string) => console.log(`[checkWork:${agent.id}] ${msg}`);
+  const log = (msg: string) => console.log(`[checkWork:${agent.person.alias}] ${msg}`);
 
   // Guard: skip if already working
-  const currentState = stateStore.get(agent.id);
+  const currentState = stateStore.get(agent.person.alias);
   if (currentState?.status === 'working') {
     log(`skipped — already working (PID: ${currentState.pid})`);
     return {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       inboxCount: 0,
       agentInvoked: false,
       recheckImmediately: false,
       durationMs: Date.now() - start,
-      error: `Agent ${agent.id} is already working (PID: ${currentState.pid})`,
+      error: `Agent ${agent.person.alias} is already working (PID: ${currentState.pid})`,
     };
   }
 
   // Mark heartbeat
-  stateStore.markHeartbeat(agent.id);
+  stateStore.markHeartbeat(agent.person.alias);
 
   try {
     // Read inbox
-    const unread = await ctx.getUnread(agent.id);
+    const unread = await ctx.getUnread(agent.person.alias);
 
     if (unread.length === 0) {
       return {
-        agentId: agent.id,
+        agentId: agent.person.alias,
         inboxCount: 0,
         agentInvoked: false,
         recheckImmediately: false,
@@ -180,17 +180,16 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     // Triage via LLM
     log('triaging...');
     const triageResults = await triageMessages(ranked, {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       agentDir: agent.dir,
       priorities: agent.files.priorities,
       bureau: agent.files.bureau,
     });
 
-    // Override: messages from super-user on #board or #approvals are ALWAYS ACT_NOW
-    // This enforces the Direct Channels contract from BUREAU.md
+    // Override: messages from super-user are ALWAYS ACT_NOW
     for (const result of triageResults) {
       const msg = ranked.find(m => m.messageId === result.messageId);
-      if (msg && msg.sender === 'super-user' && (msg.channel === 'board' || msg.channel === 'approvals') && result.classification !== 'ACT_NOW') {
+      if (msg && msg.sender === 'super-user' && result.classification !== 'ACT_NOW') {
         log(`override: ${result.classification} → ACT_NOW (super-user on #${msg.channel})`);
         result.classification = 'ACT_NOW';
         result.reasoning = `Direct message from super-user on #${msg.channel} — always ACT_NOW`;
@@ -207,7 +206,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
 
     // Process IGNORE — mark read
     if (ignore.length > 0) {
-      await ctx.markRead(agent.id, ignore.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, ignore.map(r => r.messageId));
     }
 
     // Process NOTE + QUEUE — append to memory, mark read
@@ -220,16 +219,16 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       }
     }
     if (noteAndQueue.length > 0) {
-      await ctx.markRead(agent.id, noteAndQueue.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, noteAndQueue.map(r => r.messageId));
       // Re-index memory after writing new notes
-      ctx.memoryReindex?.(agent.id, agent.dir).catch(() => {});
+      ctx.memoryReindex?.(agent.person.alias, agent.dir).catch(() => {});
     }
 
     // Process ACT_NOW — invoke main agent
     let agentInvoked = false;
     if (actNow.length > 0) {
       log(`invoking agent (${actNow.length} ACT_NOW messages)...`);
-      stateStore.updateStatus(agent.id, 'working', {
+      stateStore.updateStatus(agent.person.alias, 'working', {
         pid: process.pid,
         currentTask: `Processing ${actNow.length} message(s)`,
       });
@@ -245,7 +244,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
               .filter(m => actNow.some(r => r.messageId === m.messageId))
               .map(m => m.content)
               .join(' ');
-            const memories = await ctx.memorySearch(agent.id, actNowContent, 5);
+            const memories = await ctx.memorySearch(agent.person.alias, actNowContent, 5);
             if (memories.length > 0) {
               const memorySection = memories
                 .map(m => `- (${path.basename(m.path)}) ${m.text.slice(0, 300)}`)
@@ -296,7 +295,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           actNow.some(r => r.messageId === m.messageId)
         ).map(m => m.channel))];
         const invocationId = ctx.audit.logInvocation({
-          agentId: agent.id,
+          agentId: agent.person.alias,
           invocationType: 'checkWork',
           model: agent.identity.model,
           tokensIn: workResult.tokensIn,
@@ -324,9 +323,9 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         agentInvoked = true;
       } catch (err) {
         log(`ERROR invoking agent: ${err instanceof Error ? err.message : String(err)}`);
-        stateStore.updateStatus(agent.id, 'idle');
+        stateStore.updateStatus(agent.person.alias, 'idle');
         return {
-          agentId: agent.id,
+          agentId: agent.person.alias,
           inboxCount: unread.length,
           agentInvoked: false,
           recheckImmediately: false,
@@ -335,15 +334,15 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         };
       }
 
-      await ctx.markRead(agent.id, actNow.map(r => r.messageId));
+      await ctx.markRead(agent.person.alias, actNow.map(r => r.messageId));
     }
 
     // Return to idle
-    stateStore.updateStatus(agent.id, 'idle');
+    stateStore.updateStatus(agent.person.alias, 'idle');
     log(`done (${Date.now() - start}ms, invoked=${agentInvoked})`);
 
     return {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       inboxCount: unread.length,
       agentInvoked,
       recheckImmediately: agentInvoked,
@@ -351,9 +350,9 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     };
   } catch (err) {
     log(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
-    stateStore.updateStatus(agent.id, 'idle');
+    stateStore.updateStatus(agent.person.alias, 'idle');
     return {
-      agentId: agent.id,
+      agentId: agent.person.alias,
       inboxCount: 0,
       agentInvoked: false,
       recheckImmediately: false,

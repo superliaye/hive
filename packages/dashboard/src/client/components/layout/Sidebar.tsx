@@ -8,9 +8,13 @@ const links = [
   { to: '/audit', label: 'Audit', icon: '\u25A7' },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  onNavigate?: () => void;
+}
+
+export function Sidebar({ onNavigate }: SidebarProps) {
   return (
-    <nav className="w-56 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
+    <nav className="w-56 h-full bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
       <div className="p-4 border-b border-slate-800">
         <h1 className="text-lg font-bold text-amber-500">Hive</h1>
         <p className="text-xs text-slate-500">Dashboard</p>
@@ -21,6 +25,7 @@ export function Sidebar() {
             key={link.to}
             to={link.to}
             end={link.to === '/'}
+            onClick={onNavigate}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
                 isActive
