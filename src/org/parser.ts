@@ -94,7 +94,6 @@ export function parseIdentityFrontmatter(content: string): AgentIdentity {
     model: data.model ?? 'claude-opus-4-6',
     emoji: data.emoji,
     vibe: data.vibe,
-    tools: data.tools ?? ['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob'],
     skills: data.skills,
   };
 }

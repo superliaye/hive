@@ -98,7 +98,6 @@ function summarizeAction(
   const args = buildClaudeArgs({
     model: 'haiku',
     systemPrompt: 'Summarize what this agent did in 3-6 words. Output ONLY the summary, nothing else. Examples: "Delegated task to platform-eng", "Posted status update to #board", "Clarified routing issue"',
-    tools: [],
     outputFormat: 'json',
   });
 
@@ -260,7 +259,6 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         const args = buildClaudeArgs({
           model: agent.identity.model,
           systemPrompt,
-          tools: agent.identity.tools,
           outputFormat: 'json',
         });
 

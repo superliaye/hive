@@ -4,7 +4,7 @@ export interface AgentIdentity {
   model: string;
   emoji?: string;
   vibe?: string;
-  tools: string[];
+  skills?: string[];  // Explicit skill names from IDENTITY.md frontmatter
 }
 
 export interface AgentConfig {
@@ -21,6 +21,7 @@ export interface AgentConfig {
     priorities: string;          // Full content of PRIORITIES.md
     routine: string;             // Full content of ROUTINE.md
     memory: string;              // Full content of MEMORY.md
+    protocols: string;           // Full content of org/PROTOCOLS.md (shared across all agents)
   };
 }
 
@@ -66,6 +67,8 @@ export interface SpawnResult {
   durationMs: number;
   tokensIn?: number;
   tokensOut?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 // Re-export comms types for convenience

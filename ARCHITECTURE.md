@@ -244,13 +244,12 @@ Each agent lives in a flat directory under `org/`:
 
 ```
 org/001-ceo/
-├── config.json    Gateway-only: model, tools, mcp, skills (never in agent prompt)
+├── config.json    Gateway-only: model, mcp, skills (never in agent prompt)
 ├── IDENTITY.md    Pure prose identity (no frontmatter, loaded into agent prompt)
 ├── SOUL.md        Personality, values, communication style
 ├── BUREAU.md      Org position, reporting structure, collaborator notes
 ├── PRIORITIES.md  Starting priorities (structured data in agent.db)
 ├── MEMORY.md      Agent's curated long-term memory (agent-written)
-├── EVENTS.md      Unprocessed events template (structured data in agent.db)
 ├── agent.db       Per-agent SQLite: priorities, events, memory index
 └── memory/        Daily activity logs (YYYY-MM-DD.md), gateway-written
 ```

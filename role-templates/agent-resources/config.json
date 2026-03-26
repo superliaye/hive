@@ -2,7 +2,6 @@
   "name": "Agent Resources Manager",
   "model": "claude-opus-4-6",
   "emoji": "🧬",
-  "tools": ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
   "mcp": ["playwright"],
   "skills": ["hive-comms", "agent-provisioning", "org-health"]
 }

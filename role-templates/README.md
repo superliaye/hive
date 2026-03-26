@@ -29,7 +29,6 @@ role-templates/
 │   ├── BUREAU.md
 │   ├── PRIORITIES.md
 │   ├── MEMORY.md
-│   ├── EVENTS.md
 │   └── skills/         ← role-specific skills (optional)
 ├── agent-resources/
 │   └── ...
@@ -44,7 +43,6 @@ Controls how the gateway spawns the agent:
 - **name** — display name
 - **model** — which Claude model to use
 - **emoji** — visual identifier
-- **tools** — Claude Code tools available (Read, Write, Edit, Bash, etc.)
 - **mcp** — MCP servers to enable (e.g. "playwright"). Resolved via `--strict-mcp-config --mcp-config`
 - **skills** — skills to load into prompt. Resolved from `role-templates/<role>/skills/` or root `skills/`
 
@@ -55,4 +53,3 @@ Controls how the gateway spawns the agent:
 - **BUREAU.md** — authority levels, reporting relationships. Parameterized on instantiation.
 - **PRIORITIES.md** — starting priorities. Default first priority: 1:1 with manager and all direct reports to establish context.
 - **MEMORY.md** — starts empty. Exists so the agent has a place to accumulate knowledge from day one.
-- **EVENTS.md** — unprocessed events (org changes, scheduled jobs, webhook triggers). Does not include communications. Programmatically appended by the framework.
