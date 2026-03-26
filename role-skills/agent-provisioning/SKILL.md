@@ -16,35 +16,50 @@ If any of these are missing, DM CEO with specific clarification questions. Do NO
 
 ## Role Templates
 
-Templates live in `role-templates/`. Each template contains the standard agent files (IDENTITY.md, SOUL.md, BUREAU.md, PRIORITIES.md, MEMORY.md) with role-appropriate defaults.
+Templates live in `role-templates/`. Read the template files to understand what each role provides.
 
-Available templates:
-- `chief-executive`, `agent-resources`, `department-head`
-- `software-engineer`, `qa-engineer`, `designer`
-- `product-manager`, `product-analyst`
-
-Read the template files before creating an agent — they define the structure and conventions.
+Available: `chief-executive`, `agent-resources`, `department-head`, `software-engineer`, `qa-engineer`, `designer`, `product-manager`, `product-analyst`
 
 ## Creating an Agent
 
-### 1. Register in people table
+Use the CLI — it handles people table registration, folder creation, template copying, and reporting chain updates:
 
-Insert into the `people` table first — this is the source of truth. Use the next available ID, alias, name, role_template, and `reports_to` pointing to the manager's person ID. The folder field should be `{id}-{alias}` (e.g., `5-product-analyst`).
+```bash
+hive agent create \
+  --alias <alias> \
+  --name "<Display Name>" \
+  --template <role-template> \
+  --reports-to <manager-alias> \
+  --vibe "<personality>" \
+  --skills "skill1,skill2"
+```
 
-### 2. Pick template and create directory
+The CLI will:
+1. Validate inputs (alias unique, manager exists, template exists)
+2. Insert into people table (source of truth)
+3. Create `org/{id}-{alias}/` from the template
+4. Generate IDENTITY.md frontmatter with name, vibe, skills
+5. Update BUREAU.md with reporting relationships
+6. Update the manager's BUREAU.md to include the new direct report
 
-Choose the closest role template. Create a flat directory under `org/` named `{id}-{alias}/` matching the folder in the people table.
+After creation, customize any files that need agent-specific content beyond the template defaults.
 
-### 3. Copy and customize template files
+### Example
 
-Copy all files from the role template into the new directory. Customize:
-- **IDENTITY.md** frontmatter: name, vibe, skills for this specific agent
-- **BUREAU.md**: reports-to, direct reports, authority scope
-- **PRIORITIES.md**: initial work items from CEO's request
+```bash
+hive agent create \
+  --alias platform-eng \
+  --name "Platform Engineer" \
+  --template software-engineer \
+  --reports-to ceo \
+  --vibe "Ships solid infrastructure. Hates over-engineering."
+```
 
-### 4. Confirm to CEO
+## Listing Agents
 
-DM CEO with the agent alias, role summary, reporting relationship, and initial priorities.
+```bash
+hive agent list
+```
 
 ## Modifying an Agent
 
@@ -56,9 +71,7 @@ Move the agent directory to `.archive/`. DM CEO confirming the archive.
 
 ## Quality Gates
 
-Before creating any agent, verify:
+Before running `hive agent create`, verify:
 - [ ] Role doesn't duplicate an existing agent's responsibilities
-- [ ] Reporting chain is valid (manager exists in people table)
-- [ ] At least one concrete priority beyond "introduce yourself"
-- [ ] Skills array includes `hive-comms`
-- [ ] Model is `claude-opus-4-6` unless CEO specifies otherwise
+- [ ] At least one concrete priority from CEO's request
+- [ ] Skills include `hive-comms`

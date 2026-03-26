@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { parseOrgFlat } from './org/parser.js';
 import { scaffold } from './org/scaffold.js';
+import { provision, validateProvision } from './org/provision.js';
 import { SqliteCommsProvider } from './comms/sqlite-provider.js';
 import { ChannelManager } from './comms/channel-manager.js';
 import { MessageGateway } from './comms/message-gateway.js';
@@ -116,6 +117,95 @@ program
     console.log(`  ${chalk.bold('Mission:')} ${opts.mission}`);
     console.log(`  ${chalk.bold('Agents:')} ${result.agentsCreated.join(', ')}`);
     console.log(`\n  ${chalk.dim('Next: hive start')}`);
+  });
+
+// ── Agent management ──
+const agent = program.command('agent').description('Manage agents');
+
+agent
+  .command('create')
+  .description('Create a new agent from a role template')
+  .requiredOption('--alias <alias>', 'Unique alias (e.g., "platform-eng")')
+  .requiredOption('--name <name>', 'Display name (e.g., "Platform Engineer")')
+  .requiredOption('--template <template>', 'Role template (e.g., "software-engineer")')
+  .requiredOption('--reports-to <alias>', 'Manager alias (e.g., "ceo")')
+  .option('--vibe <vibe>', 'Personality vibe (1-2 sentences)')
+  .option('--skills <skills>', 'Additional skills (comma-separated)')
+  .action(async (opts) => {
+    const orgDir = getOrgDir();
+    const dataDir = getDataDir();
+    const templateDir = path.resolve(process.cwd(), 'role-templates');
+
+    if (!fs.existsSync(templateDir)) {
+      console.error(chalk.red('No role-templates/ directory found.'));
+      process.exit(1);
+    }
+
+    const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
+    const db = chatDb.raw();
+
+    try {
+      // Validate
+      const input = {
+        alias: opts.alias,
+        name: opts.name,
+        roleTemplate: opts.template,
+        reportsTo: opts.reportsTo,
+        vibe: opts.vibe,
+        skills: opts.skills ? opts.skills.split(',').map((s: string) => s.trim()) : undefined,
+      };
+
+      const error = validateProvision(input, db, templateDir);
+      if (error) {
+        console.error(chalk.red(`Validation failed: ${error.message}`));
+        process.exit(1);
+      }
+
+      // Create
+      const result = provision(input, db, orgDir, templateDir);
+
+      console.log(chalk.green(`✔ Agent created!\n`));
+      console.log(`  ${chalk.bold('Alias:')} @${result.person.alias}`);
+      console.log(`  ${chalk.bold('ID:')} ${result.person.id}`);
+      console.log(`  ${chalk.bold('Folder:')} org/${result.folder}/`);
+      console.log(`  ${chalk.bold('Template:')} ${opts.template}`);
+      console.log(`  ${chalk.bold('Reports to:')} @${opts.reportsTo}`);
+      console.log(`  ${chalk.bold('Dir:')} ${result.dir}`);
+    } finally {
+      chatDb.close();
+    }
+  });
+
+agent
+  .command('list')
+  .description('List all agents from the people table')
+  .action(async () => {
+    const dataDir = getDataDir();
+    const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
+    const db = chatDb.raw();
+
+    try {
+      const people = db.prepare(
+        'SELECT id, alias, name, role_template, status, folder, reports_to FROM people WHERE id > 0 ORDER BY id'
+      ).all() as { id: number; alias: string; name: string; role_template: string | null; status: string; folder: string | null; reports_to: number | null }[];
+
+      if (people.length === 0) {
+        console.log(chalk.dim('No agents found. Run `hive init` first.'));
+        return;
+      }
+
+      console.log(chalk.underline('\nAgents:\n'));
+      for (const p of people) {
+        const statusColor = p.status === 'active' ? chalk.green : chalk.dim;
+        const manager = p.reports_to
+          ? (db.prepare('SELECT alias FROM people WHERE id = ?').get(p.reports_to) as { alias: string } | undefined)?.alias ?? '?'
+          : '-';
+        console.log(`  ${chalk.bold(`@${p.alias}`)} (${p.name}) ${statusColor(p.status)} → @${manager}  ${chalk.dim(p.folder ?? '')}`);
+      }
+      console.log();
+    } finally {
+      chatDb.close();
+    }
   });
 
 program
