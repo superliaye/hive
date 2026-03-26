@@ -59,4 +59,22 @@ describe('parseOrgFlat', () => {
     expect(ceo.files.soul).toContain('Strategic thinker');
     expect(ceo.files.bureau).toContain('Super User');
   });
+
+  it('parses all 5 identity fields from IDENTITY.md frontmatter', async () => {
+    const org = await parseOrgFlat(FIXTURE_DIR, mockPeople);
+
+    const ceo = org.agents.get('ceo')!;
+    expect(ceo.identity.id).toBe(1);
+    expect(ceo.identity.alias).toBe('ceo');
+    expect(ceo.identity.name).toBe('Test CEO');
+    expect(ceo.identity.role).toBe('Chief Executive Officer');
+    expect(ceo.identity.title).toBe('CEO');
+
+    const eng1 = org.agents.get('eng-1')!;
+    expect(eng1.identity.id).toBe(3);
+    expect(eng1.identity.alias).toBe('eng-1');
+    expect(eng1.identity.name).toBe('Engineer 1');
+    expect(eng1.identity.role).toBe('Backend Software Engineer');
+    expect(eng1.identity.title).toBeUndefined();  // blank title
+  });
 });
