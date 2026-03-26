@@ -3,5 +3,5 @@
   "model": "claude-opus-4-6",
   "emoji": "🧪",
   "mcp": ["playwright"],
-  "skills": ["hive-comms", "code-lifecycle", "code-review"]
+  "skills": ["hive-comms", "code-lifecycle", "test-strategy", "security-review", "retro"]
 }
