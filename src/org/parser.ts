@@ -73,8 +73,11 @@ export async function readAgentFiles(dir: string, sharedProtocols?: string): Pro
 export function parseIdentityFrontmatter(content: string): AgentIdentity {
   const { data } = matter(content);
   return {
+    id: data.id ?? 0,
+    alias: data.alias ?? 'unknown',
     name: data.name ?? 'Unknown',
     role: data.role ?? 'Unknown',
+    title: data.title || undefined,
     model: data.model ?? 'claude-opus-4-6',
     emoji: data.emoji,
     vibe: data.vibe,

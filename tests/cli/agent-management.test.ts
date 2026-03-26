@@ -166,14 +166,57 @@ describe('hive agent create', () => {
     // Check frontmatter fields derived from software-engineer/config.json
     expect(identity).toMatch(/^---\n/);
     expect(identity).toContain('name: Software Engineer 1');
+    expect(identity).toContain('alias: se-1');
     expect(identity).toContain('role: Software Engineer');
+    expect(identity).toContain('title:');
     expect(identity).toContain('model: claude-opus-4-6');
     expect(identity).toMatch(/emoji: "🔧"/);
     expect(identity).toContain('hive-comms');
     expect(identity).toContain('code-lifecycle');
 
+    // ID should be a number matching the DB row
+    const db2 = openDb();
+    const person = db2.prepare('SELECT id FROM people WHERE alias = ?').get('se-1') as any;
+    db2.close();
+    expect(identity).toContain(`id: ${person.id}`);
+
     // The template body should still be present after the frontmatter
     expect(identity).toContain('You are a Software Engineer');
+  });
+
+  it('writes all 5 identity fields (id, alias, name, role, title) to frontmatter', () => {
+    runCli([
+      'agent', 'create',
+      '--alias', 'alice',
+      '--name', 'Alice Park',
+      '--template', 'software-engineer',
+      '--reports-to', 'ceo',
+    ]);
+
+    const db = openDb();
+    const row = db.prepare('SELECT id, folder FROM people WHERE alias = ?').get('alice') as any;
+    db.close();
+
+    const identity = fs.readFileSync(
+      path.join(tempDir, 'org', row.folder, 'IDENTITY.md'),
+      'utf-8',
+    );
+
+    // All 5 identity fields must be present
+    expect(identity).toContain(`id: ${row.id}`);
+    expect(identity).toContain('alias: alice');
+    expect(identity).toContain('name: Alice Park');
+    expect(identity).toContain('role: Software Engineer');
+    expect(identity).toContain('title:');
+
+    // Parse with gray-matter to verify they're valid YAML frontmatter
+    const matter = require('gray-matter');
+    const { data } = matter(identity);
+    expect(data.id).toBe(row.id);
+    expect(data.alias).toBe('alice');
+    expect(data.name).toBe('Alice Park');
+    expect(data.role).toBe('Software Engineer');
+    expect(data.title).toBeNull();  // blank until agent fills it
   });
 
   it('generates BUREAU.md with correct reporting line', () => {

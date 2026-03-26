@@ -27,8 +27,11 @@ export interface AgentConfig {
 }
 
 export interface AgentIdentity {
-  name: string;
-  role: string;
+  id: number;                        // person ID from people table
+  alias: string;                     // unique short identifier (e.g., "alice")
+  name: string;                      // display name (e.g., "Alice Park")
+  role: string;                      // role template name (e.g., "Software Engineer")
+  title?: string;                    // position title, agent-defined (e.g., "Auth Team Lead")
   model: string;
   emoji?: string;
   vibe?: string;

@@ -131,8 +131,11 @@ export function provision(
 
   const frontmatter = [
     '---',
+    `id: ${personId}`,
+    `alias: ${input.alias}`,
     `name: ${input.name}`,
     `role: ${config.name ?? input.roleTemplate}`,
+    `title:`,
     `model: ${config.model ?? 'claude-opus-4-6'}`,
     config.emoji ? `emoji: "${config.emoji}"` : null,
     input.vibe ? `vibe: "${input.vibe}"` : null,
