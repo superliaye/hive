@@ -1,12 +1,15 @@
 import { useApi } from '../../hooks/useApi';
 import type { Agent } from '../../types';
 
+type AgentTotalsMap = Record<string, { totalIn: number; totalOut: number }>;
+
 export function CostChart({ agents }: { agents: Agent[] }) {
-  // Fetch per-agent totals
-  const agentTotals = agents.map(a => {
-    const { data } = useApi<{ totalIn: number; totalOut: number }>(`/api/audit/totals?agentId=${a.id}`);
-    return { agent: a, totals: data };
-  });
+  const { data: totalsMap } = useApi<AgentTotalsMap>('/api/audit/agent-totals', { refreshInterval: 5000 });
+
+  const agentTotals = agents.map(a => ({
+    agent: a,
+    totals: totalsMap?.[a.id] ?? null,
+  }));
 
   const maxTotal = Math.max(
     ...agentTotals.map(at => (at.totals?.totalIn ?? 0) + (at.totals?.totalOut ?? 0)),
@@ -22,8 +25,9 @@ export function CostChart({ agents }: { agents: Agent[] }) {
           const pct = total > 0 ? (total / maxTotal) * 100 : 0;
           return (
             <div key={agent.id} className="flex items-center gap-3">
-              <span className="text-sm w-24 truncate text-slate-300">
+              <span className="text-sm w-40 truncate text-slate-300" title={agent.role ? `${agent.name}, ${agent.role}` : agent.name}>
                 {agent.emoji ?? '\u25B9'} {agent.name}
+                {agent.role && <span className="text-slate-600 text-[11px] ml-1">{agent.role}</span>}
               </span>
               <div className="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden">
                 <div

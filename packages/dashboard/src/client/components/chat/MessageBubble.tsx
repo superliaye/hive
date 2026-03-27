@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown';
-import { timeAgo } from '../shared';
+import { timeAgo, senderName } from '../shared';
+import { useAgentMap } from '../../hooks/useAgentMap';
 
 interface MessageBubbleProps {
   sender: string;
@@ -9,10 +10,11 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ sender, content, timestamp, isUser }: MessageBubbleProps) {
+  const agentMap = useAgentMap();
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} mb-4`}>
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-xs font-medium text-slate-400">{sender}</span>
+        <span className="text-xs font-medium text-slate-400">{senderName(sender, agentMap)}</span>
         <span className="text-xs text-slate-600">{timeAgo(timestamp)}</span>
       </div>
       <div className={`max-w-[80%] rounded-lg px-4 py-2.5 ${

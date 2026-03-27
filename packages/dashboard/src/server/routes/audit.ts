@@ -27,5 +27,11 @@ export function createAuditRoutes(ctx: HiveContext): Router {
     res.json(totals);
   });
 
+  // GET /api/audit/agent-totals — token totals grouped by agent (single query)
+  router.get('/agent-totals', (_req, res) => {
+    const totals = ctx.audit.getTokenTotalsByAgent();
+    res.json(totals);
+  });
+
   return router;
 }

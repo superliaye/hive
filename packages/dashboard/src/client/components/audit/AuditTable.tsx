@@ -20,15 +20,15 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
+    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-x-auto">
+      <table className="w-full text-sm min-w-[480px]">
         <thead>
           <tr className="text-left text-xs text-slate-500 border-b border-slate-800 bg-slate-900/50">
             <th className="px-4 py-2">Agent</th>
             <th className="px-4 py-2">What it did</th>
-            <th className="px-4 py-2">Channel</th>
+            <th className="px-4 py-2 hidden sm:table-cell">Channel</th>
             <th className="px-4 py-2">Tokens</th>
-            <th className="px-4 py-2">Duration</th>
+            <th className="px-4 py-2 hidden md:table-cell">Duration</th>
             <th className="px-4 py-2">When</th>
           </tr>
         </thead>
@@ -46,14 +46,14 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
                     ? <span className="text-slate-200">{inv.actionSummary}</span>
                     : inv.outputSummary ? inv.outputSummary.slice(0, 80) : inv.inputSummary ?? '-'}
                 </td>
-                <td className="px-4 py-2 text-xs">
+                <td className="px-4 py-2 text-xs hidden sm:table-cell">
                   {inv.channel ? <span className="text-amber-500 font-mono">#{inv.channel}</span> : '-'}
                 </td>
                 <td className="px-4 py-2 text-xs">
                   <span title={formatTokenTooltip(inv)}>
                     {(inv.tokensIn ?? 0).toLocaleString()} / {(inv.tokensOut ?? 0).toLocaleString()}
                     {(inv.cacheReadTokens || inv.cacheCreationTokens) ? (
-                      <span className="text-slate-600 ml-1">
+                      <span className="text-slate-600 ml-1 hidden lg:inline">
                         ({[
                           inv.cacheReadTokens ? `${inv.cacheReadTokens.toLocaleString()} cached` : '',
                           inv.cacheCreationTokens ? `${inv.cacheCreationTokens.toLocaleString()} new cache` : '',
@@ -62,7 +62,7 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
                     ) : null}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-xs">
+                <td className="px-4 py-2 text-xs hidden md:table-cell">
                   {inv.durationMs ? `${(inv.durationMs / 1000).toFixed(1)}s` : '-'}
                 </td>
                 <td className="px-4 py-2 text-xs text-slate-500">{timeAgo(inv.timestamp)}</td>

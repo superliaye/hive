@@ -1,7 +1,7 @@
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo } from '../shared';
-import type { Channel, Message } from '../../types';
+import { DashboardCard, timeAgo, formatChannelName } from '../shared';
+import type { Channel, Message, Agent } from '../../types';
 import { useEffect, useState, useCallback } from 'react';
 
 interface ChannelPreview {
@@ -10,8 +10,12 @@ interface ChannelPreview {
 }
 
 export function ChannelActivityCard() {
-  const { data: channels } = useApi<Channel[]>('/api/channels');
+  const { data: channels, loading: channelsLoading } = useApi<Channel[]>('/api/channels');
+  const { data: agents } = useApi<Agent[]>('/api/agents');
   const [previews, setPreviews] = useState<ChannelPreview[]>([]);
+  const [previewsLoaded, setPreviewsLoaded] = useState(false);
+
+  const agentMap = new Map(agents?.map(a => [a.id, a]) ?? []);
 
   useEffect(() => {
     if (!channels) return;
@@ -33,9 +37,13 @@ export function ChannelActivityCard() {
         if (!aLast && !bLast) return 0;
         if (!aLast) return 1;
         if (!bLast) return -1;
-        return new Date(bLast.timestamp).getTime() - new Date(aLast.timestamp).getTime();
+        // Timestamps from API are ISO with Z, but guard against missing Z (SQLite convention)
+        const aTime = new Date(aLast.timestamp.endsWith('Z') ? aLast.timestamp : aLast.timestamp + 'Z').getTime();
+        const bTime = new Date(bLast.timestamp.endsWith('Z') ? bLast.timestamp : bLast.timestamp + 'Z').getTime();
+        return bTime - aTime;
       });
       setPreviews(sorted.slice(0, 5));
+      setPreviewsLoaded(true);
     });
   }, [channels]);
 
@@ -51,14 +59,16 @@ export function ChannelActivityCard() {
 
   return (
     <DashboardCard title="Channel Activity" icon={'\u25A3'} linkTo="/channels">
-      {previews.length > 0 ? (
+      {!previewsLoaded || channelsLoading ? (
+        <p className="text-xs text-slate-500">Loading channels...</p>
+      ) : previews.length > 0 ? (
         <div className="space-y-3">
           {previews.map(p => {
             const lastMsg = p.recentMessages[p.recentMessages.length - 1];
             return (
               <div key={p.name} className="text-xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-amber-500 font-mono">#{p.name}</span>
+                  <span className="text-amber-500">{formatChannelName(p.name, agentMap)}</span>
                   {lastMsg && (
                     <span className="text-slate-600 ml-auto">{timeAgo(lastMsg.timestamp)}</span>
                   )}

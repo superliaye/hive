@@ -148,6 +148,17 @@ export class AuditStore {
     return { totalIn: row.total_in, totalOut: row.total_out };
   }
 
+  getTokenTotalsByAgent(): Record<string, { totalIn: number; totalOut: number }> {
+    const rows = this.db.prepare(
+      'SELECT agent_id, COALESCE(SUM(tokens_in), 0) as total_in, COALESCE(SUM(tokens_out), 0) as total_out FROM invocations GROUP BY agent_id'
+    ).all() as Array<{ agent_id: string; total_in: number; total_out: number }>;
+    const result: Record<string, { totalIn: number; totalOut: number }> = {};
+    for (const row of rows) {
+      result[row.agent_id] = { totalIn: row.total_in, totalOut: row.total_out };
+    }
+    return result;
+  }
+
   close(): void {
     this.db.close();
   }
