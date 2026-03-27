@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import type { Agent } from '../types';
 
 export function EmptyState({ message }: { message: string }) {
   return (
@@ -53,4 +54,17 @@ export function timeAgo(dateStr: string | undefined): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+/** Convert a channel name (e.g. "dm:sam") to a human-readable display name using the agent map. */
+export function formatChannelName(channelName: string, agentMap?: Map<string, Agent>): string {
+  if (channelName.startsWith('dm:')) {
+    const alias = channelName.slice(3);
+    if (agentMap) {
+      const agent = agentMap.get(alias);
+      if (agent) return `${agent.emoji ?? '\u25B9'} ${agent.name}`;
+    }
+    return alias;
+  }
+  return `# ${channelName}`;
 }

@@ -1,7 +1,7 @@
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo } from '../shared';
-import type { Channel, Message } from '../../types';
+import { DashboardCard, timeAgo, formatChannelName } from '../shared';
+import type { Channel, Message, Agent } from '../../types';
 import { useEffect, useState, useCallback } from 'react';
 
 interface ChannelPreview {
@@ -11,7 +11,9 @@ interface ChannelPreview {
 
 export function ChannelActivityCard() {
   const { data: channels } = useApi<Channel[]>('/api/channels');
+  const { data: agents } = useApi<Agent[]>('/api/agents');
   const [previews, setPreviews] = useState<ChannelPreview[]>([]);
+  const agentMap = new Map(agents?.map(a => [a.id, a]) ?? []);
 
   useEffect(() => {
     if (!channels) return;
@@ -58,7 +60,7 @@ export function ChannelActivityCard() {
             return (
               <div key={p.name} className="text-xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-amber-500 font-mono">#{p.name}</span>
+                  <span className="text-amber-500">{formatChannelName(p.name, agentMap)}</span>
                   {lastMsg && (
                     <span className="text-slate-600 ml-auto">{timeAgo(lastMsg.timestamp)}</span>
                   )}
