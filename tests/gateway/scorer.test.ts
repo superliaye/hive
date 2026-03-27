@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   scoreMessage,
   getHierarchyScore,
-  getChannelWeight,
+  getConversationWeight,
   computeRecencyDecay,
 } from '../../src/gateway/scorer.js';
 import type { AgentConfig } from '../../src/types.js';
@@ -66,18 +66,18 @@ describe('getHierarchyScore', () => {
   });
 });
 
-describe('getChannelWeight', () => {
-  it('returns 8 for dm: channels', () => {
-    expect(getChannelWeight('dm:ceo-eng-1')).toBe(8);
+describe('getConversationWeight', () => {
+  it('returns 8 for dm: conversations', () => {
+    expect(getConversationWeight('dm:ceo-eng-1')).toBe(8);
   });
 
-  it('returns 5 for non-dm channels', () => {
-    expect(getChannelWeight('eng-backend')).toBe(5);
+  it('returns 5 for non-dm conversations', () => {
+    expect(getConversationWeight('eng-backend')).toBe(5);
   });
 
-  it('returns 5 for named channels', () => {
+  it('returns 5 for named conversations', () => {
     const agent = makeAgent('eng-1');
-    expect(getChannelWeight('all-hands', agent)).toBe(5);
+    expect(getConversationWeight('all-hands', agent)).toBe(5);
   });
 });
 
@@ -111,7 +111,7 @@ describe('scoreMessage', () => {
     const score = scoreMessage(
       {
         messageId: 'msg-1',
-        channel: 'test-channel',
+        conversation: 'test-channel',
         sender: 'vp-eng',
         content: 'Important update',
         timestamp: new Date(),
@@ -130,7 +130,7 @@ describe('scoreMessage', () => {
     const urgentFromManager = scoreMessage(
       {
         messageId: 'msg-1',
-        channel: 'eng-backend',
+        conversation: 'eng-backend',
         sender: 'vp-eng',
         content: 'Deploy fix NOW',
         timestamp: new Date(),
@@ -143,7 +143,7 @@ describe('scoreMessage', () => {
     const normalFromUnknown = scoreMessage(
       {
         messageId: 'msg-2',
-        channel: 'all-hands',
+        conversation: 'all-hands',
         sender: 'random-person',
         content: 'FYI something happened',
         timestamp: new Date(Date.now() - 20 * 60 * 60 * 1000),
@@ -159,14 +159,14 @@ describe('scoreMessage', () => {
     const mentionHeavy: ScoringWeights = {
       authority: 0.05,
       urgency: 0.05,
-      channel: 0.05,
+      conversation: 0.05,
       recency: 0.05,
       mention: 0.80,
     };
     const withMention = scoreMessage(
       {
         messageId: 'msg-1',
-        channel: 'all-hands',
+        conversation: 'all-hands',
         sender: 'random',
         content: 'Hey @eng-1',
         timestamp: new Date(),
@@ -178,7 +178,7 @@ describe('scoreMessage', () => {
     const withoutMention = scoreMessage(
       {
         messageId: 'msg-2',
-        channel: 'all-hands',
+        conversation: 'all-hands',
         sender: 'random',
         content: 'General announcement',
         timestamp: new Date(),
@@ -197,14 +197,14 @@ describe('scoreMessage', () => {
     const messages = [
       {
         messageId: 'msg-low',
-        channel: 'all-hands',
+        conversation: 'all-hands',
         sender: 'unknown',
         content: 'whatever',
         timestamp: new Date(Date.now() - 23 * 60 * 60 * 1000),
       },
       {
         messageId: 'msg-high',
-        channel: 'test-channel',
+        conversation: 'test-channel',
         sender: 'vp-eng',
         content: 'Urgent fix needed',
         timestamp: new Date(),

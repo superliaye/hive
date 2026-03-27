@@ -5,7 +5,7 @@ import { AccessControl } from './access.js';
 export interface SearchOpts {
   pattern?: string;
   callerId: number;
-  scopeChannelId?: string;
+  scopeConversationId?: string;
   fromPersonId?: number;
   after?: string;
   before?: string;
@@ -28,7 +28,7 @@ export class SearchEngine {
     const {
       pattern,
       callerId,
-      scopeChannelId,
+      scopeConversationId,
       fromPersonId,
       after,
       before,
@@ -38,27 +38,27 @@ export class SearchEngine {
       offset = 0,
     } = opts;
 
-    if (!pattern && !scopeChannelId && fromPersonId === undefined) {
+    if (!pattern && !scopeConversationId && fromPersonId === undefined) {
       throw new Error('At least one of: pattern, scope (@alias/#group), or --from required');
     }
 
     const raw = this.db.raw();
 
-    const accessibleChannels = scopeChannelId
-      ? [scopeChannelId]
-      : this.access.getAccessibleChannels(callerId);
+    const accessibleConversations = scopeConversationId
+      ? [scopeConversationId]
+      : this.access.getAccessibleConversations(callerId);
 
-    if (accessibleChannels.length === 0) {
+    if (accessibleConversations.length === 0) {
       return { messages: [], total: 0, showing: { offset, limit } };
     }
 
-    if (scopeChannelId) {
-      this.access.requireMembership(callerId, scopeChannelId);
+    if (scopeConversationId) {
+      this.access.requireMembership(callerId, scopeConversationId);
     }
 
-    const placeholders = accessibleChannels.map(() => '?').join(',');
-    const conditions: string[] = [`m.channel_id IN (${placeholders})`];
-    const params: any[] = [...accessibleChannels];
+    const placeholders = accessibleConversations.map(() => '?').join(',');
+    const conditions: string[] = [`m.conversation_id IN (${placeholders})`];
+    const params: any[] = [...accessibleConversations];
 
     if (fromPersonId !== undefined) {
       conditions.push('m.sender_id = ?');
@@ -81,7 +81,7 @@ export class SearchEngine {
       FROM messages m
       JOIN people p ON m.sender_id = p.id
       WHERE ${where}
-      ORDER BY m.timestamp DESC, m.channel_id, m.seq DESC
+      ORDER BY m.timestamp DESC, m.conversation_id, m.seq DESC
     `;
 
     let rows = raw.prepare(query).all(...params) as any[];
@@ -107,7 +107,7 @@ export class SearchEngine {
     return {
       messages: sliced.map((r: any) => ({
         seq: r.seq,
-        channelId: r.channel_id,
+        conversationId: r.conversation_id,
         senderId: r.sender_id,
         senderAlias: r.sender_alias,
         content: r.content,

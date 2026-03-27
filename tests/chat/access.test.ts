@@ -79,19 +79,19 @@ describe('AccessControl', () => {
   });
 
   describe('requireMembership', () => {
-    it('throws if person is not a member of channel', () => {
+    it('throws if person is not a member of conversation', () => {
       const raw = db.raw();
-      raw.prepare("INSERT INTO channels (id, type, created_by) VALUES ('test-group', 'group', 1)").run();
-      raw.prepare("INSERT INTO channel_members (channel_id, person_id) VALUES ('test-group', 1)").run();
+      raw.prepare("INSERT INTO conversations (id, type, created_by) VALUES ('test-group', 'group', 1)").run();
+      raw.prepare("INSERT INTO conversation_members (conversation_id, person_id) VALUES ('test-group', 1)").run();
 
       expect(() => access.requireMembership(2, 'test-group'))
-        .toThrow('You are not a member of this channel');
+        .toThrow('You are not a member of this conversation');
     });
 
     it('passes if person is a member', () => {
       const raw = db.raw();
-      raw.prepare("INSERT INTO channels (id, type, created_by) VALUES ('test-group', 'group', 1)").run();
-      raw.prepare("INSERT INTO channel_members (channel_id, person_id) VALUES ('test-group', 1)").run();
+      raw.prepare("INSERT INTO conversations (id, type, created_by) VALUES ('test-group', 'group', 1)").run();
+      raw.prepare("INSERT INTO conversation_members (conversation_id, person_id) VALUES ('test-group', 1)").run();
 
       expect(() => access.requireMembership(1, 'test-group')).not.toThrow();
     });

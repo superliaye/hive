@@ -5,7 +5,7 @@ import os from 'os';
 import type { AgentConfig, OrgChart } from '../../src/types.js';
 import { AgentStateStore } from '../../src/state/agent-state.js';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 import { ChatAdapter } from '../../src/chat/adapter.js';
@@ -60,10 +60,10 @@ describe('Daemon', () => {
     chatDb = new ChatDb(path.join(tmpDir, 'hive.db'));
     // Seed ceo (super-user already seeded by ChatDb)
     chatDb.raw().prepare("INSERT OR IGNORE INTO people (id, alias, name, status) VALUES (?, ?, ?, 'active')").run(1, 'ceo', 'CEO');
-    const channelStore = new ChannelStore(chatDb);
+    const conversationStore = new ConversationStore(chatDb);
     const messageStore = new MessageStore(chatDb);
     const cursorStore = new CursorStore(chatDb);
-    chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
+    chatAdapter = new ChatAdapter(chatDb, conversationStore, messageStore, cursorStore);
     audit = new AuditStore(path.join(tmpDir, 'audit.db'));
   });
 
@@ -134,16 +134,16 @@ describe('Daemon', () => {
     await daemon.stop();
   });
 
-  it('triggers immediate checkWork on direct channel signal', async () => {
-    // Create a DM channel between super-user(0) and ceo(1)
-    const channelStore = new ChannelStore(chatDb);
-    const dmChannel = channelStore.ensureDm(0, 1);
+  it('triggers immediate checkWork on direct conversation signal', async () => {
+    // Create a DM conversation between super-user(0) and ceo(1)
+    const conversationStore = new ConversationStore(chatDb);
+    const dmConversation = conversationStore.ensureDm(0, 1);
 
     const daemon = createDaemon();
     await daemon.start();
 
-    // Simulate a message arriving on the DM channel
-    daemon.signalChannel(dmChannel.id);
+    // Simulate a message arriving on the DM conversation
+    daemon.signalConversation(dmConversation.id);
 
     // Advance past coalesce window
     vi.advanceTimersByTime(101);

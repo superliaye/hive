@@ -14,17 +14,17 @@ export function createSystemRoutes(ctx: HiveContext): Router {
     const pid = pidFile.read();
     const running = pidFile.isRunning();
 
-    let channelCount = 0;
+    let conversationCount = 0;
     try {
-      const channelIds = ctx.access.getAccessibleChannels(0);
-      channelCount = channelIds.length;
+      const conversationIds = ctx.access.getAccessibleConversations(0);
+      conversationCount = conversationIds.length;
     } catch { /* chat not initialized yet */ }
 
     res.json({
       running,
       pid: running ? pid : null,
       agentCount: ctx.orgChart.agents.size,
-      channelCount,
+      conversationCount,
     });
   });
 

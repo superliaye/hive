@@ -72,9 +72,9 @@ describe('Gateway Integration', () => {
 
       // Stage 1: Score messages
       const messages = [
-        { messageId: 'msg-urgent', channel: 'incidents', sender: 'vp-eng', content: 'Production is down!', timestamp: new Date(), metadata: { urgent: true }, mentions: ['eng-1'] },
-        { messageId: 'msg-normal', channel: 'eng-backend', sender: 'peer', content: 'Can you review this PR?', timestamp: new Date() },
-        { messageId: 'msg-noise', channel: 'all-hands', sender: 'random', content: 'Happy Friday everyone!', timestamp: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+        { messageId: 'msg-urgent', conversation: 'incidents', sender: 'vp-eng', content: 'Production is down!', timestamp: new Date(), metadata: { urgent: true }, mentions: ['eng-1'] },
+        { messageId: 'msg-normal', conversation: 'eng-backend', sender: 'peer', content: 'Can you review this PR?', timestamp: new Date() },
+        { messageId: 'msg-noise', conversation: 'all-hands', sender: 'random', content: 'Happy Friday everyone!', timestamp: new Date(Date.now() - 20 * 60 * 60 * 1000) },
       ];
 
       const ranked = rankMessages(messages, agent, DEFAULT_SCORING_WEIGHTS);

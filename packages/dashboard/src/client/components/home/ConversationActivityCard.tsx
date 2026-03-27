@@ -1,28 +1,28 @@
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo, formatChannelName } from '../shared';
-import type { Channel, Message, Agent } from '../../types';
+import { DashboardCard, timeAgo, formatConversationName } from '../shared';
+import type { Conversation, Message, Agent } from '../../types';
 import { useEffect, useState, useCallback } from 'react';
 
-interface ChannelPreview {
+interface ConversationPreview {
   name: string;
   displayName?: string;
   members: string[];
   recentMessages: Message[];
 }
 
-export function ChannelActivityCard() {
-  const { data: channels } = useApi<Channel[]>('/api/channels');
+export function ConversationActivityCard() {
+  const { data: conversations } = useApi<Conversation[]>('/api/conversations');
   const { data: agents } = useApi<Agent[]>('/api/agents');
-  const [previews, setPreviews] = useState<ChannelPreview[]>([]);
+  const [previews, setPreviews] = useState<ConversationPreview[]>([]);
   const agentMap = new Map(agents?.map(a => [a.id, a]) ?? []);
 
   useEffect(() => {
-    if (!channels) return;
+    if (!conversations) return;
     Promise.all(
-      channels.map(async (ch) => {
+      conversations.map(async (ch) => {
         try {
-          const res = await fetch(`/api/channels/${ch.name}/messages?limit=3`);
+          const res = await fetch(`/api/conversations/${ch.name}/messages?limit=3`);
           const msgs: Message[] = await res.json();
           return { name: ch.name, displayName: ch.displayName, members: ch.members, recentMessages: msgs };
         } catch {
@@ -30,7 +30,7 @@ export function ChannelActivityCard() {
         }
       })
     ).then(all => {
-      // Sort by most recent message, channels with messages first
+      // Sort by most recent message, conversations with messages first
       const sorted = all.sort((a, b) => {
         const aLast = a.recentMessages[a.recentMessages.length - 1];
         const bLast = b.recentMessages[b.recentMessages.length - 1];
@@ -41,20 +41,20 @@ export function ChannelActivityCard() {
       });
       setPreviews(sorted.slice(0, 5));
     });
-  }, [channels]);
+  }, [conversations]);
 
-  // Real-time: update channel previews when new messages arrive via SSE
+  // Real-time: update conversation previews when new messages arrive via SSE
   useSSEEvent('new-message', useCallback((event: any) => {
-    const newMsg: Message = { id: event.id, sender: event.sender, content: event.content, timestamp: event.timestamp, channel: event.channel };
+    const newMsg: Message = { id: event.id, sender: event.sender, content: event.content, timestamp: event.timestamp, conversation: event.conversation };
     setPreviews(prev => prev.map(p =>
-      p.name === event.channel
+      p.name === event.conversation
         ? { ...p, recentMessages: [...p.recentMessages.slice(-2), newMsg] }
         : p
     ));
   }, []));
 
   return (
-    <DashboardCard title="Channel Activity" icon={'\u25A3'} linkTo="/channels">
+    <DashboardCard title="Conversation Activity" icon={'\u25A3'} linkTo="/conversations">
       {previews.length > 0 ? (
         <div className="space-y-3">
           {previews.map(p => {
@@ -62,7 +62,7 @@ export function ChannelActivityCard() {
             return (
               <div key={p.name} className="text-xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-amber-500">{formatChannelName(p.name, agentMap, p.members, p.displayName)}</span>
+                  <span className="text-amber-500">{formatConversationName(p.name, agentMap, p.members, p.displayName)}</span>
                   {lastMsg && (
                     <span className="text-slate-600 ml-auto">{timeAgo(lastMsg.timestamp)}</span>
                   )}
@@ -81,7 +81,7 @@ export function ChannelActivityCard() {
           })}
         </div>
       ) : (
-        <p className="text-xs text-slate-500">No channels yet</p>
+        <p className="text-xs text-slate-500">No conversations yet</p>
       )}
     </DashboardCard>
   );

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 import { SearchEngine } from '../../src/chat/search.js';
@@ -19,7 +19,7 @@ function seedPeople(db: ChatDb) {
 describe('Error Handling', () => {
   let tmpDir: string;
   let db: ChatDb;
-  let channels: ChannelStore;
+  let conversations: ConversationStore;
   let messages: MessageStore;
   let cursors: CursorStore;
   let search: SearchEngine;
@@ -29,7 +29,7 @@ describe('Error Handling', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-errors-'));
     db = new ChatDb(path.join(tmpDir, 'org-state.db'));
     seedPeople(db);
-    channels = new ChannelStore(db);
+    conversations = new ConversationStore(db);
     messages = new MessageStore(db);
     cursors = new CursorStore(db);
     search = new SearchEngine(db);
@@ -73,102 +73,102 @@ describe('Error Handling', () => {
     });
 
     it('requireMembership throws for non-member', () => {
-      channels.createGroup('private', 1, [1, 2]);
+      conversations.createGroup('private', 1, [1, 2]);
       expect(() => access.requireMembership(3, 'private'))
-        .toThrow('You are not a member of this channel');
+        .toThrow('You are not a member of this conversation');
     });
   });
 
-  describe('ChannelStore errors', () => {
+  describe('ConversationStore errors', () => {
     it('resolveTarget with bad prefix throws helpful error', () => {
-      expect(() => channels.resolveTarget('badformat', 1))
+      expect(() => conversations.resolveTarget('badformat', 1))
         .toThrow('Target must start with @ (DM) or # (group)');
     });
 
     it('resolveTarget with unknown @alias throws', () => {
-      expect(() => channels.resolveTarget('@nobody', 1))
+      expect(() => conversations.resolveTarget('@nobody', 1))
         .toThrow('Person "nobody" not found');
     });
 
     it('resolveTarget with unknown #group throws', () => {
-      expect(() => channels.resolveTarget('#nope', 1))
+      expect(() => conversations.resolveTarget('#nope', 1))
         .toThrow('Group "nope" not found');
     });
 
     it('resolveTarget with deleted group throws', () => {
-      channels.createGroup('temp', 1, [1, 2]);
-      channels.deleteGroup('temp');
-      expect(() => channels.resolveTarget('#temp', 1))
+      conversations.createGroup('temp', 1, [1, 2]);
+      conversations.deleteGroup('temp');
+      expect(() => conversations.resolveTarget('#temp', 1))
         .toThrow('Group "temp" not found');
     });
 
     it('createGroup with invalid name chars throws', () => {
-      expect(() => channels.createGroup('Bad Name!', 1, [1, 2]))
+      expect(() => conversations.createGroup('Bad Name!', 1, [1, 2]))
         .toThrow('kebab-case');
     });
 
     it('createGroup with uppercase throws', () => {
-      expect(() => channels.createGroup('EngTeam', 1, [1, 2]))
+      expect(() => conversations.createGroup('EngTeam', 1, [1, 2]))
         .toThrow('kebab-case');
     });
 
     it('createGroup with spaces throws', () => {
-      expect(() => channels.createGroup('eng team', 1, [1, 2]))
+      expect(() => conversations.createGroup('eng team', 1, [1, 2]))
         .toThrow('kebab-case');
     });
 
     it('createGroup over 50 chars throws', () => {
-      expect(() => channels.createGroup('a'.repeat(51), 1, [1, 2]))
+      expect(() => conversations.createGroup('a'.repeat(51), 1, [1, 2]))
         .toThrow('50 characters or less');
     });
 
     it('createGroup with fewer than 2 members throws', () => {
-      expect(() => channels.createGroup('solo', 1, [1]))
+      expect(() => conversations.createGroup('solo', 1, [1]))
         .toThrow('at least 2 members');
     });
 
     it('createGroup with empty members and only creator throws', () => {
-      expect(() => channels.createGroup('solo', 1, []))
+      expect(() => conversations.createGroup('solo', 1, []))
         .toThrow('at least 2 members');
     });
 
     it('createGroup duplicate name throws', () => {
-      channels.createGroup('eng-team', 1, [1, 2]);
-      expect(() => channels.createGroup('eng-team', 1, [1, 3]))
+      conversations.createGroup('eng-team', 1, [1, 2]);
+      expect(() => conversations.createGroup('eng-team', 1, [1, 3]))
         .toThrow('already exists');
     });
 
     it('createGroup with super-user as member throws', () => {
-      expect(() => channels.createGroup('bad', 1, [0, 1, 2]))
+      expect(() => conversations.createGroup('bad', 1, [0, 1, 2]))
         .toThrow('Super-user cannot be added to groups');
     });
 
     it('createGroup with nonexistent member throws', () => {
-      expect(() => channels.createGroup('bad', 1, [1, 999]))
+      expect(() => conversations.createGroup('bad', 1, [1, 999]))
         .toThrow('Person "999" not found');
     });
 
     it('getGroupInfo for nonexistent group throws', () => {
-      expect(() => channels.getGroupInfo('nope'))
+      expect(() => conversations.getGroupInfo('nope'))
         .toThrow('Group "nope" not found');
     });
 
     it('addMember with super-user throws', () => {
-      channels.createGroup('eng', 1, [1, 2]);
-      expect(() => channels.addMember('eng', 0))
+      conversations.createGroup('eng', 1, [1, 2]);
+      expect(() => conversations.addMember('eng', 0))
         .toThrow('Super-user cannot be added to groups');
     });
   });
 
   describe('MessageStore errors', () => {
     it('history with --from > --to throws', () => {
-      channels.ensureDm(1, 2);
+      conversations.ensureDm(1, 2);
       expect(() => messages.history('dm:1:2', { from: 20, to: 10 }))
         .toThrow('--from must be <= --to');
     });
 
-    it('history on empty channel returns zero total', () => {
-      channels.ensureDm(1, 2);
+    it('history on empty conversation returns zero total', () => {
+      conversations.ensureDm(1, 2);
       const result = messages.history('dm:1:2');
       expect(result.total).toBe(0);
       expect(result.messages).toHaveLength(0);
@@ -182,19 +182,19 @@ describe('Error Handling', () => {
     });
 
     it('search with invalid regex throws', () => {
-      channels.ensureDm(1, 2);
+      conversations.ensureDm(1, 2);
       messages.send('dm:1:2', 1, 'test');
       expect(() => search.search({ pattern: '[invalid', callerId: 1, regex: true }))
         .toThrow(); // RegExp constructor throws
     });
 
-    it('search scoped to non-member channel throws', () => {
-      channels.createGroup('private', 1, [1, 2]);
-      expect(() => search.search({ pattern: 'test', callerId: 3, scopeChannelId: 'private' }))
+    it('search scoped to non-member conversation throws', () => {
+      conversations.createGroup('private', 1, [1, 2]);
+      expect(() => search.search({ pattern: 'test', callerId: 3, scopeConversationId: 'private' }))
         .toThrow('not a member');
     });
 
-    it('search returns empty for agent with no channels', () => {
+    it('search returns empty for agent with no conversations', () => {
       const result = search.search({ pattern: 'test', callerId: 3 });
       expect(result.total).toBe(0);
       expect(result.messages).toHaveLength(0);
@@ -202,13 +202,13 @@ describe('Error Handling', () => {
   });
 
   describe('CursorStore edge cases', () => {
-    it('getUnread returns empty for agent with no channels', () => {
+    it('getUnread returns empty for agent with no conversations', () => {
       const unread = cursors.getUnread(3);
       expect(unread).toHaveLength(0);
     });
 
-    it('ack on non-existent channel throws FK constraint', () => {
-      // FK constraint: channel_id must reference channels table
+    it('ack on non-existent conversation throws FK constraint', () => {
+      // FK constraint: conversation_id must reference conversations table
       expect(() => cursors.ack(2, 'dm:1:2', 5)).toThrow();
     });
   });

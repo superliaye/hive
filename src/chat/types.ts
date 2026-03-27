@@ -7,25 +7,25 @@ export interface Person {
   folder: string | null;
 }
 
-export type ChannelType = 'dm' | 'group';
+export type ConversationType = 'dm' | 'group';
 
-export interface ChatChannel {
+export interface Conversation {
   id: string;
-  type: ChannelType;
+  type: ConversationType;
   createdBy: number;
   createdAt: string;
   deleted: boolean;
 }
 
-export interface ChannelMember {
-  channelId: string;
+export interface ConversationMember {
+  conversationId: string;
   personId: number;
   joinedAt: string;
 }
 
 export interface ChatMessage {
   seq: number;
-  channelId: string;
+  conversationId: string;
   senderId: number;
   senderAlias: string;
   content: string;
@@ -35,7 +35,7 @@ export interface ChatMessage {
 export interface HistoryResult {
   messages: ChatMessage[];
   total: number;
-  channelId: string;
+  conversationId: string;
   showing: { from: number; to: number };
 }
 
@@ -47,13 +47,13 @@ export interface SearchResult {
 
 export interface ReadCursor {
   personId: number;
-  channelId: string;
+  conversationId: string;
   lastSeq: number;
   updatedAt: string;
 }
 
 export interface UnreadGroup {
-  channelId: string;
-  channelType: ChannelType;
+  conversationId: string;
+  conversationType: ConversationType;
   messages: ChatMessage[];
 }

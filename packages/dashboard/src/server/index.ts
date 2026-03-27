@@ -125,17 +125,17 @@ export async function createServer(opts: { port: number; host?: string; cwd?: st
 function wireEventBus(ctx: HiveContext, bus: HiveEventBus, daemon: Daemon | null): void {
   // Wrap messages.send → emit message:new + signal daemon
   const originalSend = ctx.messages.send.bind(ctx.messages);
-  ctx.messages.send = (channelId: string, senderId: number, content: string) => {
-    const msg = originalSend(channelId, senderId, content);
+  ctx.messages.send = (conversationId: string, senderId: number, content: string) => {
+    const msg = originalSend(conversationId, senderId, content);
     bus.emit('message:new', {
       id: `${msg.channelId}:${msg.seq}`,
-      channel: msg.channelId,
+      conversation: msg.channelId,
       sender: msg.senderAlias,
       content: msg.content,
       timestamp: msg.timestamp,
     });
     if (daemon) {
-      daemon.signalChannel(channelId);
+      daemon.signalConversation(conversationId);
     }
     return msg;
   };

@@ -9,7 +9,7 @@ import type { MemoryManager } from '../memory/manager.js';
  */
 export interface UnreadMessage {
   id: string;
-  channel: string;
+  conversation: string;
   sender: string;
   content: string;
   timestamp: Date;
@@ -34,7 +34,7 @@ export interface DaemonConfig {
   /** Default tick interval when idle (ms). Default: 600_000 (10 min) */
   tickIntervalMs?: number;
 
-  /** Direct channel coalesce window (ms). Default: 100 */
+  /** Coalesce window for conversation signals (ms). Default: 100 */
   coalesceMs?: number;
 
   /** Exponential decay schedule for rapid recheck (ms). Default: [30_000, 60_000, 180_000] */

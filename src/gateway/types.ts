@@ -2,7 +2,7 @@ export type TriageClassification = 'ACT_NOW' | 'QUEUE' | 'NOTE' | 'IGNORE';
 
 export interface ScoredMessage {
   messageId: string;
-  channel: string;
+  conversation: string;
   sender: string;
   content: string;
   timestamp: Date;
@@ -22,7 +22,7 @@ export interface TriageResult {
 export interface ScoringWeights {
   authority: number;   // Default 0.25 — sender hierarchy weight
   urgency: number;     // Default 0.25 — urgent flag weight
-  channel: number;     // Default 0.20 — channel priority weight
+  conversation: number; // Default 0.20 — conversation priority weight
   recency: number;     // Default 0.15 — message freshness weight
   mention: number;     // Default 0.15 — direct @mention weight
 }
@@ -30,7 +30,7 @@ export interface ScoringWeights {
 export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = {
   authority: 0.25,
   urgency: 0.25,
-  channel: 0.20,
+  conversation: 0.20,
   recency: 0.15,
   mention: 0.15,
 };

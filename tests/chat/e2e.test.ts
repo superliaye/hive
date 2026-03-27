@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 import { SearchEngine } from '../../src/chat/search.js';
@@ -60,7 +60,7 @@ async function runCliExpectError(deps: ChatCliDeps, args: string[], agentId: str
 describe('E2E: hive chat CLI', () => {
   let tmpDir: string;
   let chatDb: ChatDb;
-  let channelStore: ChannelStore;
+  let conversationStore: ConversationStore;
   let messageStore: MessageStore;
   let cursorStore: CursorStore;
   let searchEngine: SearchEngine;
@@ -72,13 +72,13 @@ describe('E2E: hive chat CLI', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-e2e-'));
     chatDb = new ChatDb(path.join(tmpDir, 'hive.db'));
     seedPeople(chatDb);
-    channelStore = new ChannelStore(chatDb);
+    conversationStore = new ConversationStore(chatDb);
     messageStore = new MessageStore(chatDb);
     cursorStore = new CursorStore(chatDb);
     searchEngine = new SearchEngine(chatDb);
     accessControl = new AccessControl(chatDb);
-    chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
-    deps = { db: chatDb, channels: channelStore, messages: messageStore, cursors: cursorStore, search: searchEngine, access: accessControl, dashboardPort: 0 };
+    chatAdapter = new ChatAdapter(chatDb, conversationStore, messageStore, cursorStore);
+    deps = { db: chatDb, conversations: conversationStore, messages: messageStore, cursors: cursorStore, search: searchEngine, access: accessControl, dashboardPort: 0 };
   });
 
   afterEach(() => {
@@ -87,7 +87,7 @@ describe('E2E: hive chat CLI', () => {
   });
 
   describe('send', () => {
-    it('DM send creates channel and posts message', async () => {
+    it('DM send creates conversation and posts message', async () => {
       const out = await runCli(deps, ['send', '@alice', 'hello world']);
       expect(out).toMatch(/Sent to @alice/);
 
@@ -98,7 +98,7 @@ describe('E2E: hive chat CLI', () => {
       expect(unread[0].sender).toBe('ceo');
     });
 
-    it('multiple sends accumulate in channel', async () => {
+    it('multiple sends accumulate in conversation', async () => {
       await runCli(deps, ['send', '@alice', 'msg1']);
       await runCli(deps, ['send', '@alice', 'msg2']);
 
@@ -120,7 +120,7 @@ describe('E2E: hive chat CLI', () => {
       expect(out).toContain('No unread messages');
     });
 
-    it('shows unread messages grouped by channel', async () => {
+    it('shows unread messages grouped by conversation', async () => {
       // CEO sends to alice
       await runCli(deps, ['send', '@alice', 'task for alice'], '1');
 
@@ -157,7 +157,7 @@ describe('E2E: hive chat CLI', () => {
   });
 
   describe('history', () => {
-    it('shows message history for a channel', async () => {
+    it('shows message history for a conversation', async () => {
       await runCli(deps, ['send', '@alice', 'msg1']);
       await runCli(deps, ['send', '@alice', 'msg2']);
       await runCli(deps, ['send', '@alice', 'msg3']);

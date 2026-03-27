@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { SearchEngine } from '../../src/chat/search.js';
 
@@ -17,7 +17,7 @@ function seedPeople(db: ChatDb) {
 describe('SearchEngine', () => {
   let tmpDir: string;
   let db: ChatDb;
-  let channelStore: ChannelStore;
+  let conversationStore: ConversationStore;
   let msgStore: MessageStore;
   let search: SearchEngine;
 
@@ -25,13 +25,13 @@ describe('SearchEngine', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-search-'));
     db = new ChatDb(path.join(tmpDir, 'org-state.db'));
     seedPeople(db);
-    channelStore = new ChannelStore(db);
+    conversationStore = new ConversationStore(db);
     msgStore = new MessageStore(db);
     search = new SearchEngine(db);
 
-    channelStore.ensureDm(1, 2);
-    channelStore.ensureDm(1, 3);
-    channelStore.createGroup('eng-team', 1, [1, 2, 3]);
+    conversationStore.ensureDm(1, 2);
+    conversationStore.ensureDm(1, 3);
+    conversationStore.createGroup('eng-team', 1, [1, 2, 3]);
     msgStore.send('dm:1:2', 1, 'Deploy to staging failed');
     msgStore.send('dm:1:2', 2, 'Checking the deploy logs now');
     msgStore.send('dm:1:2', 2, 'Fixed the config, deploying again');
@@ -47,7 +47,7 @@ describe('SearchEngine', () => {
   });
 
   describe('literal search', () => {
-    it('finds messages containing pattern across channels', () => {
+    it('finds messages containing pattern across conversations', () => {
       const result = search.search({ pattern: 'Deploy', callerId: 1 });
       expect(result.total).toBe(2); // "Deploy to staging" and "Deploy pipeline"
     });
@@ -74,13 +74,13 @@ describe('SearchEngine', () => {
 
   describe('scope filter', () => {
     it('scopes to DM with specific person', () => {
-      const result = search.search({ pattern: 'deploy', callerId: 1, scopeChannelId: 'dm:1:2', caseInsensitive: true });
-      expect(result.messages.every(m => m.channelId === 'dm:1:2')).toBe(true);
+      const result = search.search({ pattern: 'deploy', callerId: 1, scopeConversationId: 'dm:1:2', caseInsensitive: true });
+      expect(result.messages.every(m => m.conversationId === 'dm:1:2')).toBe(true);
     });
 
     it('scopes to group', () => {
-      const result = search.search({ pattern: 'deploy', callerId: 1, scopeChannelId: 'eng-team', caseInsensitive: true });
-      expect(result.messages.every(m => m.channelId === 'eng-team')).toBe(true);
+      const result = search.search({ pattern: 'deploy', callerId: 1, scopeConversationId: 'eng-team', caseInsensitive: true });
+      expect(result.messages.every(m => m.conversationId === 'eng-team')).toBe(true);
     });
   });
 
@@ -96,27 +96,27 @@ describe('SearchEngine', () => {
       const result = search.search({
         pattern: 'deploy',
         callerId: 1,
-        scopeChannelId: 'dm:1:2',
+        scopeConversationId: 'dm:1:2',
         fromPersonId: 2,
         caseInsensitive: true,
       });
-      expect(result.messages.every(m => m.senderId === 2 && m.channelId === 'dm:1:2')).toBe(true);
+      expect(result.messages.every(m => m.senderId === 2 && m.conversationId === 'dm:1:2')).toBe(true);
     });
 
     it('--from + scope (group) combined', () => {
       const result = search.search({
         pattern: 'tests',
         callerId: 1,
-        scopeChannelId: 'eng-team',
+        scopeConversationId: 'eng-team',
         fromPersonId: 2,
         caseInsensitive: true,
       });
-      expect(result.messages.every(m => m.senderId === 2 && m.channelId === 'eng-team')).toBe(true);
+      expect(result.messages.every(m => m.senderId === 2 && m.conversationId === 'eng-team')).toBe(true);
     });
   });
 
   describe('access control', () => {
-    it('only returns messages from channels caller is a member of', () => {
+    it('only returns messages from conversations caller is a member of', () => {
       const result = search.search({ pattern: 'staging', callerId: 3 });
       expect(result.total).toBe(0);
     });

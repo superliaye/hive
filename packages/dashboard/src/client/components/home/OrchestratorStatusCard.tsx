@@ -1,7 +1,7 @@
 import { useApi } from '../../hooks/useApi';
 
 export function OrchestratorStatusCard() {
-  const { data: status } = useApi<{ running: boolean; pid: number | null; agentCount: number; channelCount: number }>('/api/status');
+  const { data: status } = useApi<{ running: boolean; pid: number | null; agentCount: number; conversationCount: number }>('/api/status');
 
   if (!status) return null;
 
@@ -17,7 +17,7 @@ export function OrchestratorStatusCard() {
           Daemon {status.running ? 'Running' : 'Stopped'}
         </p>
         <p className="text-xs text-slate-500">
-          {status.agentCount} agents, {status.channelCount} channels
+          {status.agentCount} agents, {status.conversationCount} conversations
           {status.pid ? ` (PID: ${status.pid})` : ''}
         </p>
       </div>

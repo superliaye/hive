@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 import { SearchEngine } from '../../src/chat/search.js';
@@ -20,7 +20,7 @@ function seedOrg(db: ChatDb) {
 describe('Chat Integration', () => {
   let tmpDir: string;
   let db: ChatDb;
-  let channels: ChannelStore;
+  let conversations: ConversationStore;
   let messages: MessageStore;
   let cursors: CursorStore;
   let search: SearchEngine;
@@ -30,7 +30,7 @@ describe('Chat Integration', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-integ-'));
     db = new ChatDb(path.join(tmpDir, 'org-state.db'));
     seedOrg(db);
-    channels = new ChannelStore(db);
+    conversations = new ConversationStore(db);
     messages = new MessageStore(db);
     cursors = new CursorStore(db);
     search = new SearchEngine(db);
@@ -43,7 +43,7 @@ describe('Chat Integration', () => {
   });
 
   it('full DM flow: send → inbox → ack → history → search', () => {
-    const dm = channels.ensureDm(1, 2);
+    const dm = conversations.ensureDm(1, 2);
     const m1 = messages.send(dm.id, 1, 'Hey alice, deploy status?');
     const m2 = messages.send(dm.id, 2, 'Deploy to staging complete');
     const m3 = messages.send(dm.id, 1, 'Great, push to production');
@@ -70,15 +70,15 @@ describe('Chat Integration', () => {
     expect(results.total).toBe(2);
   });
 
-  it('full group flow: create → send → search across channels', () => {
-    channels.createGroup('sprint-1', 1, [2, 3, 4]);
+  it('full group flow: create → send → search across conversations', () => {
+    conversations.createGroup('sprint-1', 1, [2, 3, 4]);
 
     messages.send('sprint-1', 1, 'Sprint kickoff — focus on auth feature');
     messages.send('sprint-1', 2, 'Starting auth backend');
     messages.send('sprint-1', 3, 'QA test plan for auth ready');
     messages.send('sprint-1', 4, 'PRD updated with auth requirements');
 
-    channels.ensureDm(1, 2);
+    conversations.ensureDm(1, 2);
     messages.send('dm:1:2', 1, 'Alice, auth is top priority');
 
     // Alice searches for "auth" — finds messages from DM + group
@@ -100,26 +100,26 @@ describe('Chat Integration', () => {
 
   it('access control: CEO can message super-user', () => {
     expect(() => access.validateSend(1, 0)).not.toThrow();
-    channels.ensureDm(0, 1);
+    conversations.ensureDm(0, 1);
     const msg = messages.send('dm:0:1', 1, 'Board update: Q1 results');
     expect(msg.seq).toBe(1);
   });
 
   it('group lifecycle: create → add → remove → delete', () => {
-    channels.createGroup('temp', 1, [2, 3]);
+    conversations.createGroup('temp', 1, [2, 3]);
 
-    channels.addMember('temp', 4);
-    const info = channels.getGroupInfo('temp');
+    conversations.addMember('temp', 4);
+    const info = conversations.getGroupInfo('temp');
     expect(info.memberCount).toBe(4);
 
-    channels.removeMember('temp', 3);
-    const info2 = channels.getGroupInfo('temp');
+    conversations.removeMember('temp', 3);
+    const info2 = conversations.getGroupInfo('temp');
     expect(info2.memberCount).toBe(3);
 
     messages.send('temp', 1, 'Last message before archive');
-    channels.deleteGroup('temp');
+    conversations.deleteGroup('temp');
 
-    const list = channels.listGroups(1);
+    const list = conversations.listGroups(1);
     expect(list.find(g => g.id === 'temp')).toBeUndefined();
 
     // Messages preserved after delete

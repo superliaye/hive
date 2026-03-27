@@ -7,15 +7,15 @@ import type { Message, OrgMeta } from '../types';
 
 export function ChatPage() {
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
-  const channel = meta?.boardChannel;
+  const conversation = meta?.boardChannel;
   const { data: messages, setData } = useApi<Message[]>(
-    channel ? `/api/channels/${channel}/messages?limit=100` : null,
+    conversation ? `/api/conversations/${conversation}/messages?limit=100` : null,
   );
   const [rootWorking, setRootWorking] = useState(false);
   const [sending, setSending] = useState(false);
 
   useSSEEvent('new-message', useCallback((event: any) => {
-    if (channel && event.channel === channel) {
+    if (conversation && event.conversation === conversation) {
       setData(prev => {
         const exists = prev?.some(m => m.id === event.id);
         if (exists) return prev;
@@ -24,11 +24,11 @@ export function ChatPage() {
           sender: event.sender,
           content: event.content,
           timestamp: event.timestamp,
-          channel: event.channel,
+          conversation: event.conversation,
         }];
       });
     }
-  }, [channel, setData]));
+  }, [conversation, setData]));
 
   // Track root agent (CEO) working status via agent-state SSE events
   useSSEEvent('agent-state', useCallback((event: any) => {

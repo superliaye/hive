@@ -19,7 +19,7 @@ export interface CheckWorkContext {
 
   getUnread: (agentId: string) => Promise<UnreadMessage[]>;
   markRead: (agentId: string, messageIds: string[]) => Promise<void>;
-  postMessage: (agentId: string, channel: string, content: string, opts?: { thread?: string }) => Promise<void>;
+  postMessage: (agentId: string, conversationId: string, content: string, opts?: { thread?: string }) => Promise<void>;
 
   /** Optional: memory manager for semantic search over agent memories. */
   memorySearch?: (agentId: string, query: string, limit?: number) => Promise<{ text: string; path: string; score: number }[]>;
@@ -30,7 +30,7 @@ export interface CheckWorkContext {
 function toScorerInput(msg: UnreadMessage): Omit<ScoredMessage, 'score'> {
   return {
     messageId: msg.id,
-    channel: msg.channel,
+    conversation: msg.conversation,
     sender: msg.sender,
     content: msg.content,
     timestamp: msg.timestamp,
@@ -49,7 +49,7 @@ function buildWorkInput(messages: ScoredMessage[], triageResults: TriageResult[]
   const sections = actNowMessages.map(m => {
     const result = actNow.find(r => r.messageId === m.messageId);
     return [
-      `## Message from @${m.sender} in #${m.channel}`,
+      `## Message from @${m.sender} in #${m.conversation}`,
       `> ${m.content}`,
       '',
       `Triage: ${result?.reasoning ?? 'Needs immediate attention'}`,
@@ -171,7 +171,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     }
 
     log(`inbox: ${unread.length} message(s)`);
-    for (const m of unread) log(`  [${m.channel}] @${m.sender}: ${m.content.slice(0, 80)}`);
+    for (const m of unread) log(`  [${m.conversation}] @${m.sender}: ${m.content.slice(0, 80)}`);
 
     // Score deterministically
     const scorerInputs = unread.map(toScorerInput);
@@ -190,9 +190,9 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     for (const result of triageResults) {
       const msg = ranked.find(m => m.messageId === result.messageId);
       if (msg && msg.sender === 'super-user' && result.classification !== 'ACT_NOW') {
-        log(`override: ${result.classification} → ACT_NOW (super-user on #${msg.channel})`);
+        log(`override: ${result.classification} → ACT_NOW (super-user on #${msg.conversation})`);
         result.classification = 'ACT_NOW';
-        result.reasoning = `Direct message from super-user on #${msg.channel} — always ACT_NOW`;
+        result.reasoning = `Direct message from super-user on #${msg.conversation} — always ACT_NOW`;
       }
     }
 
@@ -209,7 +209,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     for (const result of noteAndQueue) {
       const msg = ranked.find(m => m.messageId === result.messageId);
       if (msg) {
-        const entry = `- [${msg.timestamp.toISOString()}] @${msg.sender} in #${msg.channel}: ${msg.content.slice(0, 200)}`;
+        const entry = `- [${msg.timestamp.toISOString()}] @${msg.sender} in #${msg.conversation}: ${msg.content.slice(0, 200)}`;
         appendToMemoryFile(agent.dir, entry);
       }
     }
@@ -281,14 +281,14 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         const actionMatch = responseText.match(/^ACTION:\s*(.+)$/m);
         if (actionMatch) {
           actionSummary = actionMatch[1].trim();
-          // Strip the ACTION: line from the response before posting to channels
+          // Strip the ACTION: line from the response before posting
           responseText = responseText.replace(/\n?^ACTION:\s*.+$/m, '').trim();
         }
 
         // Log invocation to audit store
-        const actNowChannels = [...new Set(ranked.filter(m =>
+        const actNowConversations = [...new Set(ranked.filter(m =>
           actNow.some(r => r.messageId === m.messageId)
-        ).map(m => m.channel))];
+        ).map(m => m.conversation))];
         const invocationId = ctx.audit.logInvocation({
           agentId: agent.person.alias,
           invocationType: 'checkWork',
@@ -298,10 +298,10 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           cacheReadTokens: workResult.cacheReadTokens,
           cacheCreationTokens: workResult.cacheCreationTokens,
           durationMs: workResult.durationMs,
-          inputSummary: `${actNow.length} ACT_NOW message(s) from ${actNowChannels.map(c => '#' + c).join(', ')}`,
+          inputSummary: `${actNow.length} ACT_NOW message(s) from ${actNowConversations.map(c => '#' + c).join(', ')}`,
           outputSummary: responseText.slice(0, 200),
           actionSummary,
-          channel: actNowChannels[0],
+          channel: actNowConversations[0],
         });
 
         // Fallback (option 4): if agent didn't include ACTION: tag, use haiku to summarize

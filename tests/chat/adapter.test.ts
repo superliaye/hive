@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 import { ChatAdapter } from '../../src/chat/adapter.js';
@@ -11,7 +11,7 @@ import { ChatAdapter } from '../../src/chat/adapter.js';
 describe('ChatAdapter', () => {
   let tmpDir: string;
   let db: ChatDb;
-  let channels: ChannelStore;
+  let conversations: ConversationStore;
   let messages: MessageStore;
   let cursors: CursorStore;
   let adapter: ChatAdapter;
@@ -26,14 +26,14 @@ describe('ChatAdapter', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-adapter-'));
     db = new ChatDb(path.join(tmpDir, 'test.db'));
-    channels = new ChannelStore(db);
+    conversations = new ConversationStore(db);
     messages = new MessageStore(db);
     cursors = new CursorStore(db);
     // super-user (id=0) is auto-seeded by ChatDb
     addPerson(1, 'ceo', 'CEO');
     addPerson(2, 'cto', 'CTO');
     addPerson(3, 'eng-lead', 'Eng Lead');
-    adapter = new ChatAdapter(db, channels, messages, cursors);
+    adapter = new ChatAdapter(db, conversations, messages, cursors);
   });
 
   afterEach(() => {
@@ -79,7 +79,7 @@ describe('ChatAdapter', () => {
   // ---------- ensureDm ----------
 
   describe('ensureDm', () => {
-    it('creates a DM channel and returns its id', () => {
+    it('creates a DM conversation and returns its id', () => {
       const id = adapter.ensureDm('super-user', 'ceo');
       expect(id).toBe('dm:0:1');
     });
@@ -131,7 +131,7 @@ describe('ChatAdapter', () => {
       const unread = adapter.getUnread('ceo');
       expect(unread).toHaveLength(1);
       expect(unread[0].id).toBe('dm:0:1:1');
-      expect(unread[0].channel).toBe('dm:0:1');
+      expect(unread[0].conversation).toBe('dm:0:1');
       expect(unread[0].sender).toBe('super-user');
       expect(unread[0].content).toBe('hey CEO');
       expect(unread[0].timestamp).toBeInstanceOf(Date);
@@ -145,7 +145,7 @@ describe('ChatAdapter', () => {
       expect(unread).toHaveLength(0);
     });
 
-    it('flattens multiple channels into a single array', () => {
+    it('flattens multiple conversations into a single array', () => {
       adapter.ensureDm('super-user', 'ceo');
       adapter.ensureDm('cto', 'ceo');
       adapter.postMessage('super-user', 'dm:0:1', 'from boss');
@@ -174,7 +174,7 @@ describe('ChatAdapter', () => {
       expect(adapter.getUnread('ceo')).toHaveLength(0);
     });
 
-    it('groups by channel and acks max seq per channel', () => {
+    it('groups by conversation and acks max seq per conversation', () => {
       adapter.ensureDm('super-user', 'ceo');
       adapter.ensureDm('cto', 'ceo');
       adapter.postMessage('super-user', 'dm:0:1', 'a');
@@ -202,24 +202,24 @@ describe('ChatAdapter', () => {
     });
   });
 
-  // ---------- getChannelMembers ----------
+  // ---------- getConversationMembers ----------
 
-  describe('getChannelMembers', () => {
-    it('returns member aliases for a DM channel', () => {
+  describe('getConversationMembers', () => {
+    it('returns member aliases for a DM conversation', () => {
       adapter.ensureDm('super-user', 'ceo');
-      const members = adapter.getChannelMembers('dm:0:1');
+      const members = adapter.getConversationMembers('dm:0:1');
       expect(members.sort()).toEqual(['ceo', 'super-user']);
     });
 
-    it('returns empty array for nonexistent channel', () => {
-      expect(adapter.getChannelMembers('dm:99:100')).toEqual([]);
+    it('returns empty array for nonexistent conversation', () => {
+      expect(adapter.getConversationMembers('dm:99:100')).toEqual([]);
     });
   });
 
   // ---------- synthetic ID format ----------
 
   describe('synthetic ID format', () => {
-    it('uses {channelId}:{seq} format', () => {
+    it('uses {conversationId}:{seq} format', () => {
       adapter.ensureDm('cto', 'eng-lead');
       const id = adapter.postMessage('cto', 'dm:2:3', 'hi');
       expect(id).toBe('dm:2:3:1');

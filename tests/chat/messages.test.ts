@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 
 function seedPeople(db: ChatDb) {
@@ -16,14 +16,14 @@ function seedPeople(db: ChatDb) {
 describe('MessageStore', () => {
   let tmpDir: string;
   let db: ChatDb;
-  let channelStore: ChannelStore;
+  let conversationStore: ConversationStore;
   let messages: MessageStore;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-msg-'));
     db = new ChatDb(path.join(tmpDir, 'org-state.db'));
     seedPeople(db);
-    channelStore = new ChannelStore(db);
+    conversationStore = new ConversationStore(db);
     messages = new MessageStore(db);
   });
 
@@ -33,17 +33,17 @@ describe('MessageStore', () => {
   });
 
   describe('send', () => {
-    it('returns per-channel sequential seq id', () => {
-      channelStore.ensureDm(1, 2);
+    it('returns per-conversation sequential seq id', () => {
+      conversationStore.ensureDm(1, 2);
       const msg1 = messages.send('dm:1:2', 1, 'hello');
       const msg2 = messages.send('dm:1:2', 2, 'hi back');
       expect(msg1.seq).toBe(1);
       expect(msg2.seq).toBe(2);
     });
 
-    it('seq ids are independent per channel', () => {
-      channelStore.ensureDm(1, 2);
-      channelStore.ensureDm(1, 3);
+    it('seq ids are independent per conversation', () => {
+      conversationStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 3);
       messages.send('dm:1:2', 1, 'hello alice');
       messages.send('dm:1:2', 1, 'again alice');
       const msg = messages.send('dm:1:3', 1, 'hello bob');
@@ -51,13 +51,13 @@ describe('MessageStore', () => {
     });
 
     it('includes sender alias in returned message', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       const msg = messages.send('dm:1:2', 1, 'test');
       expect(msg.senderAlias).toBe('ceo');
     });
 
     it('stores multiline content', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       const msg = messages.send('dm:1:2', 1, 'line1\nline2\nline3');
       expect(msg.content).toBe('line1\nline2\nline3');
     });
@@ -65,7 +65,7 @@ describe('MessageStore', () => {
 
   describe('history', () => {
     beforeEach(() => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       for (let i = 1; i <= 30; i++) {
         messages.send('dm:1:2', i % 2 === 0 ? 2 : 1, `message ${i}`);
       }

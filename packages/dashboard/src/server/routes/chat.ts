@@ -11,17 +11,17 @@ export function createChatRoutes(ctx: HiveContext, sse: SSEManager): Router {
     return agents.find(a => !a.reportsTo) ?? null;
   }
 
-  // POST /api/chat/post — post to any channel as any agent (used by `hive post`)
+  // POST /api/chat/post — post to any conversation as any agent (used by `hive post`)
   router.post('/post', (req, res) => {
-    const { channel, sender, message } = req.body;
-    if (!channel || !sender || !message) {
-      res.status(400).json({ error: 'channel, sender, and message are required' });
+    const { conversation, sender, message } = req.body;
+    if (!conversation || !sender || !message) {
+      res.status(400).json({ error: 'conversation, sender, and message are required' });
       return;
     }
     try {
       const senderId = ctx.chatAdapter.resolveAlias(sender);
-      const msg = ctx.messages.send(channel, senderId, message);
-      res.json({ posted: true, messageId: `${channel}:${msg.seq}` });
+      const msg = ctx.messages.send(conversation, senderId, message);
+      res.json({ posted: true, messageId: `${conversation}:${msg.seq}` });
     } catch (err: any) {
       console.error('[chat/post] Error:', err.message);
       res.status(500).json({ error: err.message });
@@ -40,12 +40,12 @@ export function createChatRoutes(ctx: HiveContext, sse: SSEManager): Router {
       const root = getRootAgent();
       const rootAlias = root?.person.alias ?? 'ceo';
       const rootId = ctx.chatAdapter.resolveAlias(rootAlias);
-      const channel = ctx.channels.ensureDm(0, rootId); // 0 = super-user
-      const msg = ctx.messages.send(channel.id, 0, message);
+      const conversation = ctx.conversations.ensureDm(0, rootId); // 0 = super-user
+      const msg = ctx.messages.send(conversation.id, 0, message);
 
       res.json({
         posted: true,
-        messageId: `${channel.id}:${msg.seq}`,
+        messageId: `${conversation.id}:${msg.seq}`,
       });
     } catch (err: any) {
       console.error('[chat] Error:', err.message);

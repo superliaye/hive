@@ -56,7 +56,7 @@ describe('HiveContext', () => {
       expect(ctx.chatAdapter).toBeDefined();
       expect(ctx.audit).toBeDefined();
       expect(ctx.state).toBeDefined();
-      expect(ctx.channels).toBeDefined();
+      expect(ctx.conversations).toBeDefined();
       expect(ctx.dataDir).toBe(path.resolve(tempDir, 'data'));
       expect(ctx.orgDir).toBe(path.resolve(tempDir, 'org'));
     } finally {

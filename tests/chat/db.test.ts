@@ -23,8 +23,8 @@ describe('ChatDb', () => {
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all() as { name: string }[];
     const names = tables.map(t => t.name);
-    expect(names).toContain('channels');
-    expect(names).toContain('channel_members');
+    expect(names).toContain('conversations');
+    expect(names).toContain('conversation_members');
     expect(names).toContain('messages');
     expect(names).toContain('read_cursors');
   });

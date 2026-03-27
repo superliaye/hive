@@ -4,7 +4,7 @@ import { Shell } from './components/layout/Shell';
 import { HomePage } from './pages/HomePage';
 import { OrgPage } from './pages/OrgPage';
 import { ChatPage } from './pages/ChatPage';
-import { ChannelsPage } from './pages/ChannelsPage';
+import { ConversationsPage } from './pages/ConversationsPage';
 import { AuditPage } from './pages/AuditPage';
 
 export function App() {
@@ -16,7 +16,7 @@ export function App() {
             <Route index element={<HomePage />} />
             <Route path="org" element={<OrgPage />} />
             <Route path="chat" element={<ChatPage />} />
-            <Route path="channels" element={<ChannelsPage />} />
+            <Route path="conversations" element={<ConversationsPage />} />
             <Route path="audit" element={<AuditPage />} />
           </Route>
         </Routes>

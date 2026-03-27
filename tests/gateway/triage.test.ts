@@ -16,7 +16,7 @@ const mockSpawnClaude = vi.mocked(spawnClaude);
 function makeScoredMessage(overrides: Partial<ScoredMessage> = {}): ScoredMessage {
   return {
     messageId: 'msg-1',
-    channel: 'eng-backend',
+    conversation: 'eng-backend',
     sender: 'vp-eng',
     content: 'Please review the PR',
     timestamp: new Date('2026-03-22T10:00:00Z'),

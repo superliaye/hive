@@ -36,22 +36,22 @@ export class AccessControl {
     }
   }
 
-  /** Throws if personId is not a member of channelId. */
-  requireMembership(personId: number, channelId: string): void {
+  /** Throws if personId is not a member of conversationId. */
+  requireMembership(personId: number, conversationId: string): void {
     const row = this.db.raw()
-      .prepare('SELECT 1 FROM channel_members WHERE channel_id = ? AND person_id = ?')
-      .get(channelId, personId);
+      .prepare('SELECT 1 FROM conversation_members WHERE conversation_id = ? AND person_id = ?')
+      .get(conversationId, personId);
     if (!row) {
-      throw new Error('You are not a member of this channel');
+      throw new Error('You are not a member of this conversation');
     }
   }
 
-  /** Get all channel IDs this person is a member of. */
-  getAccessibleChannels(personId: number): string[] {
+  /** Get all conversation IDs this person is a member of. */
+  getAccessibleConversations(personId: number): string[] {
     const rows = this.db.raw()
-      .prepare('SELECT channel_id FROM channel_members WHERE person_id = ?')
-      .all(personId) as { channel_id: string }[];
-    return rows.map(r => r.channel_id);
+      .prepare('SELECT conversation_id FROM conversation_members WHERE person_id = ?')
+      .all(personId) as { conversation_id: string }[];
+    return rows.map(r => r.conversation_id);
   }
 
   /** Parse HIVE_AGENT_ID env var. Throws if missing. */

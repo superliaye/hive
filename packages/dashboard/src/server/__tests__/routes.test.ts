@@ -120,16 +120,16 @@ describe('Dashboard API routes', () => {
     expect(body.error).toBe('Agent not found');
   });
 
-  it('GET /api/channels returns channel list', async () => {
-    const { status, body } = await request('/api/channels');
+  it('GET /api/conversations returns conversation list', async () => {
+    const { status, body } = await request('/api/conversations');
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);
   });
 
-  it('GET /api/channels/:name/messages returns messages array', async () => {
-    const channelIds = ctx.access.getAccessibleChannels(0);
-    const channelName = channelIds[0] ?? 'board';
-    const { status, body } = await request(`/api/channels/${channelName}/messages`);
+  it('GET /api/conversations/:id/messages returns messages array', async () => {
+    const conversationIds = ctx.access.getAccessibleConversations(0);
+    const conversationId = conversationIds[0] ?? 'board';
+    const { status, body } = await request(`/api/conversations/${conversationId}/messages`);
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);
   });

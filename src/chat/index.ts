@@ -1,5 +1,5 @@
 export { ChatDb } from './db.js';
-export { ChannelStore } from './channels.js';
+export { ConversationStore } from './conversations.js';
 export { MessageStore } from './messages.js';
 export { CursorStore } from './cursors.js';
 export { SearchEngine } from './search.js';

@@ -3,7 +3,7 @@ import type { HiveContext } from '../../../../src/context.js';
 import type { Daemon } from '../../../../src/daemon/daemon.js';
 import type { SSEManager } from './sse.js';
 import { createOrgRoutes, createAgentRoutes } from './routes/org.js';
-import { createChannelRoutes } from './routes/channels.js';
+import { createConversationRoutes } from './routes/conversations.js';
 import { createChatRoutes } from './routes/chat.js';
 import { createAuditRoutes } from './routes/audit.js';
 import { createSystemRoutes } from './routes/system.js';
@@ -12,20 +12,20 @@ export function createApiRouter(ctx: HiveContext, sse: SSEManager, daemon?: Daem
   const router = Router();
   router.use('/org', createOrgRoutes(ctx));
   router.use('/agents', createAgentRoutes(ctx));
-  router.use('/channels', createChannelRoutes(ctx));
+  router.use('/conversations', createConversationRoutes(ctx));
   router.use('/chat', createChatRoutes(ctx, sse));
   router.use('/audit', createAuditRoutes(ctx));
   router.use('/', createSystemRoutes(ctx));
 
-  // POST /api/signal — notify daemon that a message arrived on a channel
+  // POST /api/signal — notify daemon that a message arrived on a conversation
   router.post('/signal', (req, res) => {
-    const { channel } = req.body;
-    if (!channel) {
-      res.status(400).json({ error: 'channel is required' });
+    const { conversation } = req.body;
+    if (!conversation) {
+      res.status(400).json({ error: 'conversation is required' });
       return;
     }
     if (daemon) {
-      daemon.signalChannel(channel);
+      daemon.signalConversation(conversation);
     }
     res.json({ signaled: true });
   });

@@ -29,14 +29,14 @@ export function getHierarchyScore(
 }
 
 /**
- * Compute channel priority weight.
+ * Compute conversation priority weight.
  * DMs get 8, groups get 5, unknown gets 2.
  */
-export function getChannelWeight(
-  channel: string,
+export function getConversationWeight(
+  conversationId: string,
   _agent?: AgentConfig,
 ): number {
-  if (channel.startsWith('dm:')) return 8;
+  if (conversationId.startsWith('dm:')) return 8;
   return 5;
 }
 
@@ -67,13 +67,13 @@ export function scoreMessage(
 ): number {
   const authority = getHierarchyScore(msg.sender, agent, orgAgents);
   const urgency = msg.metadata?.urgent ? 10 : 0;
-  const channel = getChannelWeight(msg.channel, agent);
+  const conversation = getConversationWeight(msg.conversation, agent);
   const recency = computeRecencyDecay(msg.timestamp);
   const mention = msg.mentions?.includes(agent.person.alias) ? 10 : 0;
 
   const raw = (authority * weights.authority)
     + (urgency * weights.urgency)
-    + (channel * weights.channel)
+    + (conversation * weights.conversation)
     + (recency * weights.recency)
     + (mention * weights.mention);
 

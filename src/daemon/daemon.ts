@@ -91,16 +91,15 @@ export class Daemon {
   }
 
   /**
-   * Signal that a message arrived on a channel.
-   * Looks up channel members and triggers coalesced CheckWork for each.
+   * Signal that a message arrived on a conversation.
+   * Looks up conversation members and triggers coalesced CheckWork for each.
    */
-  signalChannel(channel: string): void {
+  signalConversation(conversationId: string): void {
     let memberAliases: string[];
     try {
-      memberAliases = this.config.chatAdapter.getChannelMembers(channel);
+      memberAliases = this.config.chatAdapter.getConversationMembers(conversationId);
     } catch (err) {
-      // Channel doesn't exist yet — expected for newly created channels before DB sync
-      console.debug(`[daemon] signalChannel: could not resolve members for ${channel}`);
+      console.debug(`[daemon] signalConversation: could not resolve members for ${conversationId}`);
       return;
     }
 
@@ -234,8 +233,8 @@ export class Daemon {
       markRead: async (agentId, messageIds) => {
         this.config.chatAdapter.markRead(agentId, messageIds);
       },
-      postMessage: async (agentId, channel, content) => {
-        this.config.chatAdapter.postMessage(agentId, channel, content);
+      postMessage: async (agentId, conversationId, content) => {
+        this.config.chatAdapter.postMessage(agentId, conversationId, content);
       },
       memorySearch: async (agentId, query, limit) => {
         return this.config.memory.search(agentId, query, limit);

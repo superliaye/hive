@@ -13,7 +13,7 @@ export interface ApprovalDecision {
 }
 
 /**
- * Parse an approval request from a channel message.
+ * Parse an approval request from a chat message.
  * Format:
  *   **Approval Request: <item-id>**
  *   Type: AR_CHANGE | HEAVYWEIGHT | BUDGET | OTHER

@@ -1,5 +1,5 @@
 import type { ChatDb } from './db.js';
-import type { ChannelStore } from './channels.js';
+import type { ConversationStore } from './conversations.js';
 import type { MessageStore } from './messages.js';
 import type { CursorStore } from './cursors.js';
 import type { UnreadMessage } from '../daemon/types.js';
@@ -16,7 +16,7 @@ export class ChatAdapter {
 
   constructor(
     private db: ChatDb,
-    private channels: ChannelStore,
+    private conversations: ConversationStore,
     private messages: MessageStore,
     private cursors: CursorStore,
   ) {
@@ -46,22 +46,22 @@ export class ChatAdapter {
     this.loadPeopleCache();
   }
 
-  /** Ensures DM channel exists between two aliases. Returns channel ID. */
+  /** Ensures DM conversation exists between two aliases. Returns conversation ID. */
   ensureDm(aliasA: string, aliasB: string): string {
     const idA = this.resolveAlias(aliasA);
     const idB = this.resolveAlias(aliasB);
-    const channel = this.channels.ensureDm(idA, idB);
-    return channel.id;
+    const conv = this.conversations.ensureDm(idA, idB);
+    return conv.id;
   }
 
   /**
-   * Posts a message to a channel.
-   * Returns synthetic message ID in format `{channelId}:{seq}`.
+   * Posts a message to a conversation.
+   * Returns synthetic message ID in format `{conversationId}:{seq}`.
    */
-  postMessage(senderAlias: string, channelId: string, content: string): string {
+  postMessage(senderAlias: string, conversationId: string, content: string): string {
     const senderId = this.resolveAlias(senderAlias);
-    const msg = this.messages.send(channelId, senderId, content);
-    return `${msg.channelId}:${msg.seq}`;
+    const msg = this.messages.send(conversationId, senderId, content);
+    return `${msg.conversationId}:${msg.seq}`;
   }
 
   /**
@@ -76,8 +76,8 @@ export class ChatAdapter {
     for (const group of groups) {
       for (const msg of group.messages) {
         result.push({
-          id: `${msg.channelId}:${msg.seq}`,
-          channel: msg.channelId,
+          id: `${msg.conversationId}:${msg.seq}`,
+          conversation: msg.conversationId,
           sender: msg.senderAlias,
           content: msg.content,
           timestamp: new Date(msg.timestamp),
@@ -89,21 +89,20 @@ export class ChatAdapter {
   }
 
   /**
-   * Parses synthetic IDs back to channelId+seq, groups by channel,
-   * and advances cursors to the max seq per channel.
+   * Parses synthetic IDs back to conversationId+seq, groups by conversation,
+   * and advances cursors to the max seq per conversation.
    */
   markRead(alias: string, messageIds: string[]): void {
     const personId = this.resolveAlias(alias);
 
-    // Group by channel, track max seq per channel
-    const maxSeqByChannel = new Map<string, number>();
+    const maxSeqByConversation = new Map<string, number>();
 
     for (const syntheticId of messageIds) {
       const lastColon = syntheticId.lastIndexOf(':');
       if (lastColon === -1) {
         throw new Error(`Invalid synthetic message ID: "${syntheticId}"`);
       }
-      const channelId = syntheticId.slice(0, lastColon);
+      const conversationId = syntheticId.slice(0, lastColon);
       const seqStr = syntheticId.slice(lastColon + 1);
       if (seqStr === '') {
         throw new Error(`Invalid synthetic message ID: "${syntheticId}"`);
@@ -113,20 +112,20 @@ export class ChatAdapter {
         throw new Error(`Invalid seq in message ID: "${syntheticId}"`);
       }
 
-      const current = maxSeqByChannel.get(channelId) ?? 0;
+      const current = maxSeqByConversation.get(conversationId) ?? 0;
       if (seq > current) {
-        maxSeqByChannel.set(channelId, seq);
+        maxSeqByConversation.set(conversationId, seq);
       }
     }
 
-    for (const [channelId, maxSeq] of maxSeqByChannel) {
-      this.cursors.ack(personId, channelId, maxSeq);
+    for (const [conversationId, maxSeq] of maxSeqByConversation) {
+      this.cursors.ack(personId, conversationId, maxSeq);
     }
   }
 
-  /** Returns member aliases for a channel (used by signal handler). */
-  getChannelMembers(channelId: string): string[] {
-    const members = this.channels.getMembers(channelId);
+  /** Returns member aliases for a conversation (used by signal handler). */
+  getConversationMembers(conversationId: string): string[] {
+    const members = this.conversations.getMembers(conversationId);
     return members.map(m => this.resolveId(m.personId));
   }
 

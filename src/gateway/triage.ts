@@ -58,7 +58,7 @@ function formatMessagesForTriage(messages: ScoredMessage[]): string {
   return JSON.stringify(
     messages.map((m) => ({
       messageId: m.messageId,
-      channel: m.channel,
+      conversation: m.conversation,
       sender: m.sender,
       content: m.content,
       timestamp: m.timestamp.toISOString(),

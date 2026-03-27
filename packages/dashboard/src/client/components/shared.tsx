@@ -56,11 +56,11 @@ export function timeAgo(dateStr: string | undefined): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-/** Convert a channel name to a human-readable display name using the agent map.
+/** Convert a conversation name to a human-readable display name using the agent map.
  *  Handles both old format "dm:alias" and new format "dm:0:1".
  *  When displayName is provided (from server), uses it directly.
- *  When members array is provided (from /api/channels), uses member aliases for display. */
-export function formatChannelName(channelName: string, agentMap?: Map<string, Agent>, members?: string[], displayName?: string): string {
+ *  When members array is provided (from /api/conversations), uses member aliases for display. */
+export function formatConversationName(conversationName: string, agentMap?: Map<string, Agent>, members?: string[], displayName?: string): string {
   // Prefer server-provided display name
   if (displayName) {
     if (displayName.startsWith('@') && agentMap) {
@@ -70,7 +70,7 @@ export function formatChannelName(channelName: string, agentMap?: Map<string, Ag
     }
     return displayName;
   }
-  if (channelName.startsWith('dm:')) {
+  if (conversationName.startsWith('dm:')) {
     // New format: dm:N:M — use members array to find agent names
     if (members && agentMap) {
       const names = members
@@ -82,16 +82,16 @@ export function formatChannelName(channelName: string, agentMap?: Map<string, Ag
       if (names.length > 0) return names.join(' \u2194 ');
     }
     // Fallback: try old format dm:alias
-    const rest = channelName.slice(3);
+    const rest = conversationName.slice(3);
     if (agentMap && !rest.includes(':')) {
       const agent = agentMap.get(rest);
       if (agent) return `${agent.emoji ?? '\u25B9'} ${agent.name}`;
     }
     // Fallback: show members if available
     if (members) {
-      return members.filter(a => a !== 'super-user').join(' \u2194 ') || channelName;
+      return members.filter(a => a !== 'super-user').join(' \u2194 ') || conversationName;
     }
     return rest;
   }
-  return `# ${channelName}`;
+  return `# ${conversationName}`;
 }

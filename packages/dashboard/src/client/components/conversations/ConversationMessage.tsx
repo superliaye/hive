@@ -2,7 +2,7 @@ import Markdown from 'react-markdown';
 import { timeAgo } from '../shared';
 import type { Message } from '../../types';
 
-export function ChannelMessage({ message }: { message: Message }) {
+export function ConversationMessage({ message }: { message: Message }) {
   return (
     <div className="px-4 py-3 hover:bg-slate-800/30 transition-colors">
       <div className="flex items-center gap-2 mb-1">

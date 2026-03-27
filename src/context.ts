@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { parseOrgFlat } from './org/parser.js';
 import { ChatDb } from './chat/db.js';
-import { ChannelStore } from './chat/channels.js';
+import { ConversationStore } from './chat/conversations.js';
 import { MessageStore } from './chat/messages.js';
 import { CursorStore } from './chat/cursors.js';
 import { SearchEngine } from './chat/search.js';
@@ -15,7 +15,7 @@ import type { OrgChart, Person } from './types.js';
 
 export class HiveContext {
   readonly orgChart: OrgChart;
-  readonly channels: ChannelStore;
+  readonly conversations: ConversationStore;
   readonly messages: MessageStore;
   readonly cursors: CursorStore;
   readonly search: SearchEngine;
@@ -30,7 +30,7 @@ export class HiveContext {
 
   private constructor(opts: {
     orgChart: OrgChart;
-    channels: ChannelStore;
+    conversations: ConversationStore;
     messages: MessageStore;
     cursors: CursorStore;
     search: SearchEngine;
@@ -44,7 +44,7 @@ export class HiveContext {
     orgDir: string;
   }) {
     this.orgChart = opts.orgChart;
-    this.channels = opts.channels;
+    this.conversations = opts.conversations;
     this.messages = opts.messages;
     this.cursors = opts.cursors;
     this.search = opts.search;
@@ -88,12 +88,12 @@ export class HiveContext {
     const people = HiveContext.loadPeople(chatDb);
     const orgChart = await parseOrgFlat(orgDir, people);
 
-    const channelStore = new ChannelStore(chatDb);
+    const conversationStore = new ConversationStore(chatDb);
     const messageStore = new MessageStore(chatDb);
     const cursorStore = new CursorStore(chatDb);
     const searchEngine = new SearchEngine(chatDb);
     const accessControl = new AccessControl(chatDb);
-    const chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
+    const chatAdapter = new ChatAdapter(chatDb, conversationStore, messageStore, cursorStore);
 
     const audit = new AuditStore(path.join(dataDir, 'audit.db'));
     const state = new AgentStateStore(path.join(dataDir, 'orchestrator.db'));
@@ -101,7 +101,7 @@ export class HiveContext {
 
     return new HiveContext({
       orgChart,
-      channels: channelStore,
+      conversations: conversationStore,
       messages: messageStore,
       cursors: cursorStore,
       search: searchEngine,

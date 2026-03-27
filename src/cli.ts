@@ -4,7 +4,7 @@ import { scaffold } from './org/scaffold.js';
 import { provision, validateProvision } from './org/provision.js';
 import { HiveContext } from './context.js';
 import { ChatDb } from './chat/db.js';
-import { ChannelStore } from './chat/channels.js';
+import { ConversationStore } from './chat/conversations.js';
 import { MessageStore } from './chat/messages.js';
 import { CursorStore } from './chat/cursors.js';
 import { SearchEngine } from './chat/search.js';
@@ -300,10 +300,10 @@ program
     }
 
     // Wire chat stores and adapter
-    const channelStore = new ChannelStore(chatDb);
+    const conversationStore = new ConversationStore(chatDb);
     const messageStore = new MessageStore(chatDb);
     const cursorStore = new CursorStore(chatDb);
-    const chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
+    const chatAdapter = new ChatAdapter(chatDb, conversationStore, messageStore, cursorStore);
     const stateStore = new AgentStateStore(path.join(dataDir, 'orchestrator.db'));
     const auditStore = new AuditStore(path.join(dataDir, 'audit.db'));
 
@@ -377,12 +377,12 @@ program
 {
   const dataDir = getDataDir();
   const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
-  const channels = new ChannelStore(chatDb);
+  const conversations = new ConversationStore(chatDb);
   const messages = new MessageStore(chatDb);
   const cursors = new CursorStore(chatDb);
   const search = new SearchEngine(chatDb);
   const access = new AccessControl(chatDb);
-  program.addCommand(buildChatCommand({ db: chatDb, channels, messages, cursors, search, access }));
+  program.addCommand(buildChatCommand({ db: chatDb, conversations, messages, cursors, search, access }));
 }
 
 program

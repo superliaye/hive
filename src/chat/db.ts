@@ -11,6 +11,22 @@ export class ChatDb {
   }
 
   private init(): void {
+    // Migrate old table names if they exist
+    const oldTable = this.db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='channels'"
+    ).get();
+    if (oldTable) {
+      this.db.exec(`
+        ALTER TABLE channels RENAME TO conversations;
+        ALTER TABLE channel_members RENAME TO conversation_members;
+        ALTER TABLE messages RENAME COLUMN channel_id TO conversation_id;
+        ALTER TABLE read_cursors RENAME COLUMN channel_id TO conversation_id;
+        ALTER TABLE conversation_members RENAME COLUMN channel_id TO conversation_id;
+        DROP INDEX IF EXISTS idx_messages_channel_ts;
+        DROP INDEX IF EXISTS idx_channel_members_person;
+      `);
+    }
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS people (
         id INTEGER PRIMARY KEY,
@@ -23,7 +39,7 @@ export class ChatDb {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
-      CREATE TABLE IF NOT EXISTS channels (
+      CREATE TABLE IF NOT EXISTS conversations (
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL CHECK (type IN ('dm', 'group')),
         created_by INTEGER NOT NULL REFERENCES people(id),
@@ -31,33 +47,33 @@ export class ChatDb {
         deleted INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE TABLE IF NOT EXISTS channel_members (
-        channel_id TEXT NOT NULL REFERENCES channels(id),
+      CREATE TABLE IF NOT EXISTS conversation_members (
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
         person_id INTEGER NOT NULL REFERENCES people(id),
         joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (channel_id, person_id)
+        PRIMARY KEY (conversation_id, person_id)
       );
 
       CREATE TABLE IF NOT EXISTS messages (
         seq INTEGER NOT NULL,
-        channel_id TEXT NOT NULL REFERENCES channels(id),
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
         sender_id INTEGER NOT NULL REFERENCES people(id),
         content TEXT NOT NULL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (channel_id, seq)
+        PRIMARY KEY (conversation_id, seq)
       );
 
       CREATE TABLE IF NOT EXISTS read_cursors (
         person_id INTEGER NOT NULL REFERENCES people(id),
-        channel_id TEXT NOT NULL REFERENCES channels(id),
+        conversation_id TEXT NOT NULL REFERENCES conversations(id),
         last_seq INTEGER NOT NULL DEFAULT 0,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (person_id, channel_id)
+        PRIMARY KEY (person_id, conversation_id)
       );
 
-      CREATE INDEX IF NOT EXISTS idx_messages_channel_ts ON messages(channel_id, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_messages_conversation_ts ON messages(conversation_id, timestamp);
       CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
-      CREATE INDEX IF NOT EXISTS idx_channel_members_person ON channel_members(person_id);
+      CREATE INDEX IF NOT EXISTS idx_conversation_members_person ON conversation_members(person_id);
     `);
 
     // Seed super-user if not exists

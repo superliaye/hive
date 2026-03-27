@@ -28,7 +28,7 @@ vi.mock('../../src/gateway/scorer.js', () => ({
   rankMessages: vi.fn(() => []),
   scoreMessage: vi.fn(() => 5),
   getHierarchyScore: vi.fn(() => 5),
-  getChannelWeight: vi.fn(() => 5),
+  getConversationWeight: vi.fn(() => 5),
   computeRecencyDecay: vi.fn(() => 5),
 }));
 
@@ -123,11 +123,11 @@ describe('checkWork', () => {
 
   it('invokes agent when inbox has ACT_NOW messages', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'What is the status?', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'What is the status?', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'What is the status?', timestamp: new Date(), score: 9.0 },
+      { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'What is the status?', timestamp: new Date(), score: 9.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Super user request', score: 9.0 },
@@ -156,11 +156,11 @@ describe('checkWork', () => {
 
   it('does NOT invoke agent when all messages are NOTE/IGNORE', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'all-hands', sender: 'random', content: 'Lunch at noon', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'all-hands', sender: 'random', content: 'Lunch at noon', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'all-hands', sender: 'random', content: 'Lunch at noon', timestamp: new Date(), score: 2.0 },
+      { messageId: 'msg-1', conversation: 'all-hands', sender: 'random', content: 'Lunch at noon', timestamp: new Date(), score: 2.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'IGNORE', reasoning: 'Irrelevant', score: 2.0 },
@@ -194,11 +194,11 @@ describe('checkWork', () => {
 
   it('sets agent state to working during invocation and back to idle after', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'Do it', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'Do it', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'Do it', timestamp: new Date(), score: 9.0 },
+      { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'Do it', timestamp: new Date(), score: 9.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
@@ -221,11 +221,11 @@ describe('checkWork', () => {
 
   it('returns to idle state even when Claude CLI crashes', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'urgent', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'urgent', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'urgent', timestamp: new Date(), score: 9.0 },
+      { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'urgent', timestamp: new Date(), score: 9.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'urgent', score: 9.0 },
@@ -243,11 +243,11 @@ describe('checkWork', () => {
 
   it('handles NOTE messages by marking as read', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'all-hands', sender: 'ceo', content: 'Q2 goals announced', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'all-hands', sender: 'ceo', content: 'Q2 goals announced', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'all-hands', sender: 'ceo', content: 'Q2 goals announced', timestamp: new Date(), score: 4.0 },
+      { messageId: 'msg-1', conversation: 'all-hands', sender: 'ceo', content: 'Q2 goals announced', timestamp: new Date(), score: 4.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'NOTE', reasoning: 'Informational', score: 4.0 },
@@ -268,11 +268,11 @@ describe('checkWork', () => {
 
   it('logs invocation to audit store with token counts', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
+      { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
@@ -305,11 +305,11 @@ describe('checkWork', () => {
 
   it('passes cache token counts through to audit store', async () => {
     const unread = [
-      { id: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date() },
+      { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date() },
     ];
 
     mockRankMessages.mockReturnValue([
-      { messageId: 'msg-1', channel: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
+      { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
     ]);
     mockTriageMessages.mockResolvedValue([
       { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 
@@ -17,7 +17,7 @@ function seedPeople(db: ChatDb) {
 describe('CursorStore', () => {
   let tmpDir: string;
   let db: ChatDb;
-  let channelStore: ChannelStore;
+  let conversationStore: ConversationStore;
   let msgStore: MessageStore;
   let cursors: CursorStore;
 
@@ -25,7 +25,7 @@ describe('CursorStore', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-cursors-'));
     db = new ChatDb(path.join(tmpDir, 'org-state.db'));
     seedPeople(db);
-    channelStore = new ChannelStore(db);
+    conversationStore = new ConversationStore(db);
     msgStore = new MessageStore(db);
     cursors = new CursorStore(db);
   });
@@ -37,19 +37,19 @@ describe('CursorStore', () => {
 
   describe('getUnread', () => {
     it('returns messages after cursor position', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       msgStore.send('dm:1:2', 1, 'msg2');
       msgStore.send('dm:1:2', 1, 'msg3');
 
       const unread = cursors.getUnread(2);
       expect(unread).toHaveLength(1);
-      expect(unread[0].channelId).toBe('dm:1:2');
+      expect(unread[0].conversationId).toBe('dm:1:2');
       expect(unread[0].messages).toHaveLength(3);
     });
 
     it('respects cursor advancement', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       msgStore.send('dm:1:2', 1, 'msg2');
 
@@ -64,16 +64,16 @@ describe('CursorStore', () => {
     });
 
     it('returns empty when fully caught up', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       cursors.ack(2, 'dm:1:2', 1);
       const unread = cursors.getUnread(2);
       expect(unread).toHaveLength(0);
     });
 
-    it('groups by channel', () => {
-      channelStore.ensureDm(1, 2);
-      channelStore.ensureDm(2, 3);
+    it('groups by conversation', () => {
+      conversationStore.ensureDm(1, 2);
+      conversationStore.ensureDm(2, 3);
       msgStore.send('dm:1:2', 1, 'from ceo');
       msgStore.send('dm:2:3', 3, 'from bob');
 
@@ -82,7 +82,7 @@ describe('CursorStore', () => {
     });
 
     it('excludes messages sent by self', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 2, 'my own msg');
       const unread = cursors.getUnread(2);
       expect(unread).toHaveLength(0);
@@ -91,7 +91,7 @@ describe('CursorStore', () => {
 
   describe('ack', () => {
     it('advances cursor', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       msgStore.send('dm:1:2', 1, 'msg2');
       msgStore.send('dm:1:2', 1, 'msg3');
@@ -104,7 +104,7 @@ describe('CursorStore', () => {
     });
 
     it('is idempotent — acking same seq twice is fine', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       cursors.ack(2, 'dm:1:2', 1);
       cursors.ack(2, 'dm:1:2', 1);
@@ -113,7 +113,7 @@ describe('CursorStore', () => {
     });
 
     it('does not go backwards', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       msgStore.send('dm:1:2', 1, 'msg2');
       cursors.ack(2, 'dm:1:2', 2);
@@ -132,7 +132,7 @@ describe('CursorStore', () => {
 
   describe('edge cases', () => {
     it('ack with seq higher than max message seq advances cursor', () => {
-      channelStore.ensureDm(1, 2);
+      conversationStore.ensureDm(1, 2);
       msgStore.send('dm:1:2', 1, 'msg1');
       cursors.ack(2, 'dm:1:2', 999);
       const cursor = cursors.getCursor(2, 'dm:1:2');

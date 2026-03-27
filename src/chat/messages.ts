@@ -13,24 +13,24 @@ const DEFAULT_LIMIT = 20;
 export class MessageStore {
   constructor(private db: ChatDb) {}
 
-  /** Send a message to a channel. Returns the message with per-channel seq. Atomic. */
-  send(channelId: string, senderId: number, content: string): ChatMessage {
+  /** Send a message to a conversation. Returns the message with per-conversation seq. Atomic. */
+  send(conversationId: string, senderId: number, content: string): ChatMessage {
     const raw = this.db.raw();
 
     const txn = raw.transaction(() => {
       const last = raw.prepare(
-        'SELECT MAX(seq) as maxSeq FROM messages WHERE channel_id = ?'
-      ).get(channelId) as any;
+        'SELECT MAX(seq) as maxSeq FROM messages WHERE conversation_id = ?'
+      ).get(conversationId) as any;
       const seq = (last?.maxSeq ?? 0) + 1;
 
       raw.prepare(
-        'INSERT INTO messages (seq, channel_id, sender_id, content) VALUES (?, ?, ?, ?)'
-      ).run(seq, channelId, senderId, content);
+        'INSERT INTO messages (seq, conversation_id, sender_id, content) VALUES (?, ?, ?, ?)'
+      ).run(seq, conversationId, senderId, content);
 
       const sender = raw.prepare('SELECT alias FROM people WHERE id = ?').get(senderId) as any;
       const row = raw.prepare(
-        'SELECT * FROM messages WHERE channel_id = ? AND seq = ?'
-      ).get(channelId, seq) as any;
+        'SELECT * FROM messages WHERE conversation_id = ? AND seq = ?'
+      ).get(conversationId, seq) as any;
 
       return this.toMessage(row, sender?.alias ?? 'unknown');
     });
@@ -38,8 +38,8 @@ export class MessageStore {
     return txn();
   }
 
-  /** Get message history for a channel with flexible range/limit options. */
-  history(channelId: string, opts: HistoryOpts = {}): HistoryResult {
+  /** Get message history for a conversation with flexible range/limit options. */
+  history(conversationId: string, opts: HistoryOpts = {}): HistoryResult {
     const { from, to, all } = opts;
     const limit = opts.limit ?? DEFAULT_LIMIT;
     const raw = this.db.raw();
@@ -49,12 +49,12 @@ export class MessageStore {
     }
 
     const totalRow = raw.prepare(
-      'SELECT COUNT(*) as cnt FROM messages WHERE channel_id = ?'
-    ).get(channelId) as any;
+      'SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?'
+    ).get(conversationId) as any;
     const total = totalRow.cnt;
 
-    const conditions: string[] = ['m.channel_id = ?'];
-    const params: any[] = [channelId];
+    const conditions: string[] = ['m.conversation_id = ?'];
+    const params: any[] = [conversationId];
 
     if (from !== undefined) {
       conditions.push('m.seq >= ?');
@@ -87,7 +87,7 @@ export class MessageStore {
     return {
       messages,
       total,
-      channelId,
+      conversationId,
       showing: { from: showingFrom, to: showingTo },
     };
   }
@@ -95,7 +95,7 @@ export class MessageStore {
   private toMessage(row: any, senderAlias: string): ChatMessage {
     return {
       seq: row.seq,
-      channelId: row.channel_id,
+      conversationId: row.conversation_id,
       senderId: row.sender_id,
       senderAlias,
       content: row.content,

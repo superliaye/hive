@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { Daemon } from '../../src/daemon/daemon.js';
 import { AgentStateStore } from '../../src/state/agent-state.js';
 import { ChatDb } from '../../src/chat/db.js';
-import { ChannelStore } from '../../src/chat/channels.js';
+import { ConversationStore } from '../../src/chat/conversations.js';
 import { MessageStore } from '../../src/chat/messages.js';
 import { CursorStore } from '../../src/chat/cursors.js';
 import { ChatAdapter } from '../../src/chat/adapter.js';
@@ -65,7 +65,7 @@ describe('Daemon Integration', () => {
   let stateStore: AgentStateStore;
   let chatDb: ChatDb;
   let chatAdapter: ChatAdapter;
-  let channelStore: ChannelStore;
+  let conversationStore: ConversationStore;
   let messageStore: MessageStore;
   let cursorStore: CursorStore;
   let audit: AuditStore;
@@ -83,10 +83,10 @@ describe('Daemon Integration', () => {
         "INSERT OR IGNORE INTO people (id, alias, name, role_template, status) VALUES (?, ?, ?, ?, 'active')"
       ).run(p.id, p.alias, p.name, p.roleTemplate ?? null);
     }
-    channelStore = new ChannelStore(chatDb);
+    conversationStore = new ConversationStore(chatDb);
     messageStore = new MessageStore(chatDb);
     cursorStore = new CursorStore(chatDb);
-    chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
+    chatAdapter = new ChatAdapter(chatDb, conversationStore, messageStore, cursorStore);
     audit = new AuditStore(path.join(tmpDir, 'audit.db'));
   });
 
@@ -98,13 +98,13 @@ describe('Daemon Integration', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('direct channel triggers CEO response when message posted to dm:ceo', async () => {
+  it('direct conversation triggers CEO response when message posted to dm:ceo', async () => {
     const fixtureOrg = path.resolve(__dirname, '../fixtures/sample-org');
     const people = fixturePeople();
     const orgChart = await parseOrgFlat(fixtureOrg, people);
 
-    // Ensure dm:ceo channel exists so we can post to it
-    const dmChannel = channelStore.ensureDm(0, 1); // super-user (0) → ceo (1)
+    // Ensure dm:ceo conversation exists so we can post to it
+    const dmConversation = conversationStore.ensureDm(0, 1); // super-user (0) → ceo (1)
 
     const daemon = new Daemon({
       orgChart,
@@ -123,8 +123,8 @@ describe('Daemon Integration', () => {
     await daemon.start();
 
     // Post a message to dm:ceo (super-user → CEO)
-    messageStore.send(dmChannel.id, 0, 'What is the status?');
-    daemon.signalChannel(dmChannel.id);
+    messageStore.send(dmConversation.id, 0, 'What is the status?');
+    daemon.signalConversation(dmConversation.id);
 
     // Advance past coalesce window
     vi.advanceTimersByTime(51);
@@ -139,13 +139,13 @@ describe('Daemon Integration', () => {
     await daemon.stop();
   });
 
-  it('periodic tick processes inbox without direct channel signal', async () => {
+  it('periodic tick processes inbox without direct conversation signal', async () => {
     const fixtureOrg = path.resolve(__dirname, '../fixtures/sample-org');
     const people = fixturePeople();
     const orgChart = await parseOrgFlat(fixtureOrg, people);
 
-    // Ensure dm:ceo channel exists
-    const dmChannel = channelStore.ensureDm(0, 1); // super-user (0) → ceo (1)
+    // Ensure dm:ceo conversation exists
+    const dmConversation = conversationStore.ensureDm(0, 1); // super-user (0) → ceo (1)
 
     const daemon = new Daemon({
       orgChart,
@@ -164,7 +164,7 @@ describe('Daemon Integration', () => {
     await daemon.start();
 
     // Post a message but DON'T signal — wait for periodic tick
-    messageStore.send(dmChannel.id, 0, 'Periodic check');
+    messageStore.send(dmConversation.id, 0, 'Periodic check');
 
     // Advance to trigger the 10-minute tick
     vi.advanceTimersByTime(600_001);

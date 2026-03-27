@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 
 export interface NewMessageEvent {
   id: string;
-  channel: string;
+  conversation: string;
   sender: string;
   content: string;
   timestamp: string;
