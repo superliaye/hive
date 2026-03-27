@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 
 interface ChannelPreview {
   name: string;
+  members: string[];
   recentMessages: Message[];
 }
 
@@ -22,9 +23,9 @@ export function ChannelActivityCard() {
         try {
           const res = await fetch(`/api/channels/${ch.name}/messages?limit=3`);
           const msgs: Message[] = await res.json();
-          return { name: ch.name, recentMessages: msgs };
+          return { name: ch.name, members: ch.members, recentMessages: msgs };
         } catch {
-          return { name: ch.name, recentMessages: [] as Message[] };
+          return { name: ch.name, members: ch.members, recentMessages: [] as Message[] };
         }
       })
     ).then(all => {
@@ -60,7 +61,7 @@ export function ChannelActivityCard() {
             return (
               <div key={p.name} className="text-xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-amber-500">{formatChannelName(p.name, agentMap)}</span>
+                  <span className="text-amber-500">{formatChannelName(p.name, agentMap, p.members)}</span>
                   {lastMsg && (
                     <span className="text-slate-600 ml-auto">{timeAgo(lastMsg.timestamp)}</span>
                   )}

@@ -3,12 +3,14 @@ import { ChannelList } from '../components/channels/ChannelList';
 import { ChannelFeed } from '../components/channels/ChannelFeed';
 import { useApi } from '../hooks/useApi';
 import { formatChannelName } from '../components/shared';
-import type { Agent } from '../types';
+import type { Agent, Channel } from '../types';
 
 export function ChannelsPage() {
   const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const { data: agents } = useApi<Agent[]>('/api/agents');
+  const { data: channels } = useApi<Channel[]>('/api/channels');
   const agentMap = new Map(agents?.map(a => [a.id, a]) ?? []);
+  const selectedCh = channels?.find(ch => ch.name === selectedChannel);
 
   return (
     <div className="flex flex-col md:flex-row h-full -m-3 md:-m-6">
@@ -29,7 +31,7 @@ export function ChannelsPage() {
               >
                 &larr; Back
               </button>
-              <h2 className="text-lg font-medium text-slate-200">{formatChannelName(selectedChannel, agentMap)}</h2>
+              <h2 className="text-lg font-medium text-slate-200">{formatChannelName(selectedChannel, agentMap, selectedCh?.members)}</h2>
             </div>
             <div className="flex-1 overflow-auto">
               <ChannelFeed channel={selectedChannel} />

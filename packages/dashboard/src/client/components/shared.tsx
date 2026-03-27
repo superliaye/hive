@@ -56,15 +56,32 @@ export function timeAgo(dateStr: string | undefined): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-/** Convert a channel name (e.g. "dm:sam") to a human-readable display name using the agent map. */
-export function formatChannelName(channelName: string, agentMap?: Map<string, Agent>): string {
+/** Convert a channel name to a human-readable display name using the agent map.
+ *  Handles both old format "dm:alias" and new format "dm:0:1".
+ *  When members array is provided (from /api/channels), uses member aliases for display. */
+export function formatChannelName(channelName: string, agentMap?: Map<string, Agent>, members?: string[]): string {
   if (channelName.startsWith('dm:')) {
-    const alias = channelName.slice(3);
-    if (agentMap) {
-      const agent = agentMap.get(alias);
+    // New format: dm:N:M — use members array to find agent names
+    if (members && agentMap) {
+      const names = members
+        .filter(alias => alias !== 'super-user')
+        .map(alias => {
+          const agent = agentMap.get(alias);
+          return agent ? `${agent.emoji ?? '\u25B9'} ${agent.name}` : alias;
+        });
+      if (names.length > 0) return names.join(' \u2194 ');
+    }
+    // Fallback: try old format dm:alias
+    const rest = channelName.slice(3);
+    if (agentMap && !rest.includes(':')) {
+      const agent = agentMap.get(rest);
       if (agent) return `${agent.emoji ?? '\u25B9'} ${agent.name}`;
     }
-    return alias;
+    // Fallback: show members if available
+    if (members) {
+      return members.filter(a => a !== 'super-user').join(' \u2194 ') || channelName;
+    }
+    return rest;
   }
   return `# ${channelName}`;
 }

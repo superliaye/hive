@@ -127,8 +127,8 @@ describe('Dashboard API routes', () => {
   });
 
   it('GET /api/channels/:name/messages returns messages array', async () => {
-    const channels = await ctx.comms.listChannels();
-    const channelName = channels[0]?.name ?? 'board';
+    const channelIds = ctx.access.getAccessibleChannels(0);
+    const channelName = channelIds[0] ?? 'board';
     const { status, body } = await request(`/api/channels/${channelName}/messages`);
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);

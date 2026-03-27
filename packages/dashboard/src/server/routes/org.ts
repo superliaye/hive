@@ -49,10 +49,16 @@ export function createOrgRoutes(ctx: HiveContext): Router {
   router.get('/meta', (_req, res) => {
     const agentList = Array.from(ctx.orgChart.agents.values());
     const root = agentList.find(a => !a.reportsTo);
+    const rootAlias = root?.person.alias ?? 'ceo';
+    const rootName = root?.identity.name ?? 'CEO';
+
+    const rootId = ctx.chatAdapter.resolveAlias(rootAlias);
+    const channel = ctx.channels.ensureDm(0, rootId);
+
     res.json({
-      rootAlias: root?.person.alias ?? null,
-      rootName: root?.identity.name ?? 'CEO',
-      boardChannel: 'board',
+      rootAlias,
+      rootName,
+      boardChannel: channel.id,
     });
   });
 

@@ -25,14 +25,15 @@ export async function createServer(opts: { port: number; host?: string; cwd?: st
   if (!pidFile.isRunning()) {
     daemon = new Daemon({
       orgChart: ctx.orgChart,
-      comms: ctx.comms,
+      chatAdapter: ctx.chatAdapter,
       audit: ctx.audit,
       state: ctx.state,
-      channelManager: ctx.channelManager,
+      memory: ctx.memory,
       dataDir: ctx.dataDir,
       orgDir: ctx.orgDir,
       pidFilePath: path.join(ctx.dataDir, 'hive.pid'),
       tickIntervalMs: 600_000,
+      loadPeople: () => HiveContext.loadPeople(ctx.chatDb),
     });
 
     try {
@@ -58,7 +59,7 @@ export async function createServer(opts: { port: number; host?: string; cwd?: st
   app.get('/api/events', (req, res) => sse.addClient(req, res));
 
   // API routes
-  app.use('/api', createApiRouter(ctx, sse));
+  app.use('/api', createApiRouter(ctx, sse, daemon));
 
   // Start SSE event-driven mode (with slow fallback heartbeat)
   sse.start();
@@ -122,20 +123,19 @@ export async function createServer(opts: { port: number; host?: string; cwd?: st
  * After each mutation, emit the corresponding event for real-time SSE push.
  */
 function wireEventBus(ctx: HiveContext, bus: HiveEventBus, daemon: Daemon | null): void {
-  // Wrap comms.postMessage → emit message:new + signal daemon
-  const originalPostMessage = ctx.comms.postMessage.bind(ctx.comms);
-  ctx.comms.postMessage = async (channel: string, sender: string, content: string, opts?: { thread?: string }) => {
-    const msg = await originalPostMessage(channel, sender, content, opts);
+  // Wrap messages.send → emit message:new + signal daemon
+  const originalSend = ctx.messages.send.bind(ctx.messages);
+  ctx.messages.send = (channelId: string, senderId: number, content: string) => {
+    const msg = originalSend(channelId, senderId, content);
     bus.emit('message:new', {
-      id: msg.id,
-      channel: msg.channel,
-      sender: msg.sender,
+      id: `${msg.channelId}:${msg.seq}`,
+      channel: msg.channelId,
+      sender: msg.senderAlias,
       content: msg.content,
-      timestamp: msg.timestamp.toISOString(),
-      thread: msg.thread,
+      timestamp: msg.timestamp,
     });
     if (daemon) {
-      daemon.signalChannel(channel);
+      daemon.signalChannel(channelId);
     }
     return msg;
   };
