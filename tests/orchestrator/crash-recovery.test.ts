@@ -55,7 +55,7 @@ describe('Crash Recovery', () => {
   });
 
   describe('recoverStaleAgents', () => {
-    it('marks stale agents as errored and returns recovery report', () => {
+    it('resets stale agents to idle and returns recovery report', () => {
       stateStore.register('eng-1');
       stateStore.register('eng-2');
       stateStore.updateStatus('eng-1', 'working', { pid: 999999999, currentTask: 'building API' });
@@ -68,11 +68,21 @@ describe('Crash Recovery', () => {
       expect(report.recoveredAgents[0].previousTask).toBe('building API');
       expect(report.recoveredAgents[1].agentId).toBe('eng-2');
 
-      // Verify state was updated
+      // Verify state was reset to idle (ready for fresh start)
       const eng1 = stateStore.get('eng-1');
-      expect(eng1?.status).toBe('errored');
+      expect(eng1?.status).toBe('idle');
       const eng2 = stateStore.get('eng-2');
-      expect(eng2?.status).toBe('errored');
+      expect(eng2?.status).toBe('idle');
+    });
+
+    it('resets errored agents from previous session to idle', () => {
+      stateStore.register('eng-1');
+      stateStore.updateStatus('eng-1', 'errored', { currentTask: 'Rate-limited' });
+
+      const report = recoverStaleAgents(stateStore);
+
+      expect(report.recoveredAgents).toHaveLength(1);
+      expect(stateStore.get('eng-1')?.status).toBe('idle');
     });
 
     it('returns empty report when no stale agents exist', () => {

@@ -6,21 +6,24 @@ import type { Message, OrgMeta } from '../../types';
 
 export function RecentChatCard() {
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
-  const { data: messages, setData } = useApi<Message[]>('/api/channels/board/messages?limit=5');
+  const channel = meta?.boardChannel;
+  const { data: messages, setData } = useApi<Message[]>(
+    channel ? `/api/channels/${channel}/messages?limit=5` : null,
+  );
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
 
   useSSEEvent('new-message', useCallback((event: any) => {
-    if (event.channel === 'board') {
+    if (channel && event.channel === channel) {
       setData(prev => [...(prev ?? []).slice(-4), {
         id: event.id,
         sender: event.sender,
         content: event.content,
         timestamp: event.timestamp,
-        channel: 'board',
+        channel: event.channel,
       }]);
     }
-  }, [setData]));
+  }, [channel, setData]));
 
   const send = async () => {
     if (!input.trim() || sending) return;
@@ -40,7 +43,7 @@ export function RecentChatCard() {
   const rootName = meta?.rootName ?? 'CEO';
 
   return (
-    <DashboardCard title={`${rootName} Chat (#board)`} icon={'\u25C9'} linkTo="/chat">
+    <DashboardCard title={`${rootName} Chat`} icon={'\u25C9'} linkTo="/chat">
       <div className="space-y-2 mb-3">
         {messages && messages.length > 0 ? (
           messages.slice(-3).map(m => (

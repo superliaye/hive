@@ -22,25 +22,40 @@ export function detectStaleAgents(stateStore: AgentStateStore): AgentState[] {
 
 /**
  * Recover stale agents:
- * 1. Mark each as 'errored' in the state store
- * 2. Return a recovery report for the orchestrator to alert CEO
+ * 1. Reset 'working' agents with dead PIDs back to 'idle' (dirty shutdown)
+ * 2. Reset 'errored' agents back to 'idle' (fresh start after restart)
+ * 3. Return a recovery report for the orchestrator to alert CEO
  *
- * The next heartbeat cycle will re-invoke errored agents normally.
+ * On clean restart, ALL agents should get a fresh start. The crash rate
+ * limiter is in-memory anyway, so errored state from previous sessions
+ * is meaningless.
  */
 export function recoverStaleAgents(stateStore: AgentStateStore): RecoveryReport {
   const stale = detectStaleAgents(stateStore);
   const recoveredAgents: RecoveredAgent[] = [];
 
+  // Recover agents stuck in 'working' (dirty shutdown)
   for (const agent of stale) {
-    stateStore.updateStatus(agent.agentId, 'errored', {
-      currentTask: `RECOVERED: ${agent.currentTask ?? 'unknown task'}`,
-    });
+    stateStore.updateStatus(agent.agentId, 'idle');
 
     recoveredAgents.push({
       agentId: agent.agentId,
       previousTask: agent.currentTask,
       previousPid: agent.pid,
     });
+  }
+
+  // Reset any agents left in 'errored' from previous session
+  const allAgents = stateStore.listAll();
+  for (const agent of allAgents) {
+    if (agent.status === 'errored') {
+      stateStore.updateStatus(agent.agentId, 'idle');
+      recoveredAgents.push({
+        agentId: agent.agentId,
+        previousTask: agent.currentTask,
+        previousPid: agent.pid,
+      });
+    }
   }
 
   return {

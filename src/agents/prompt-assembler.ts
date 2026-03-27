@@ -12,7 +12,7 @@ ACTION: <3-6 word summary of what you did>
 
 Examples:
 ACTION: Delegated task to platform-eng
-ACTION: Posted status update to #board
+ACTION: Posted status update to dm:ceo
 ACTION: Updated sprint priorities
 ACTION: Clarified routing confusion to AR`;
 

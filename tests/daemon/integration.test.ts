@@ -5,9 +5,12 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { Daemon } from '../../src/daemon/daemon.js';
 import { AgentStateStore } from '../../src/state/agent-state.js';
-import { SqliteCommsProvider } from '../../src/comms/sqlite-provider.js';
+import { ChatDb } from '../../src/chat/db.js';
+import { ChannelStore } from '../../src/chat/channels.js';
+import { MessageStore } from '../../src/chat/messages.js';
+import { CursorStore } from '../../src/chat/cursors.js';
+import { ChatAdapter } from '../../src/chat/adapter.js';
 import { AuditStore } from '../../src/audit/store.js';
-import { ChannelManager } from '../../src/comms/channel-manager.js';
 import { parseOrgFlat } from '../../src/org/parser.js';
 import type { Person } from '../../src/types.js';
 
@@ -60,7 +63,11 @@ vi.mock('../../src/gateway/triage.js', () => ({
 describe('Daemon Integration', () => {
   let tmpDir: string;
   let stateStore: AgentStateStore;
-  let comms: SqliteCommsProvider;
+  let chatDb: ChatDb;
+  let chatAdapter: ChatAdapter;
+  let channelStore: ChannelStore;
+  let messageStore: MessageStore;
+  let cursorStore: CursorStore;
   let audit: AuditStore;
 
   beforeEach(() => {
@@ -68,34 +75,42 @@ describe('Daemon Integration', () => {
     vi.useFakeTimers();
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-daemon-int-'));
     stateStore = new AgentStateStore(path.join(tmpDir, 'state.db'));
-    comms = new SqliteCommsProvider(path.join(tmpDir, 'comms.db'));
+    chatDb = new ChatDb(path.join(tmpDir, 'hive.db'));
+    // Seed people
+    const seedPeople = fixturePeople();
+    for (const p of seedPeople) {
+      chatDb.raw().prepare(
+        "INSERT OR IGNORE INTO people (id, alias, name, role_template, status) VALUES (?, ?, ?, ?, 'active')"
+      ).run(p.id, p.alias, p.name, p.roleTemplate ?? null);
+    }
+    channelStore = new ChannelStore(chatDb);
+    messageStore = new MessageStore(chatDb);
+    cursorStore = new CursorStore(chatDb);
+    chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
     audit = new AuditStore(path.join(tmpDir, 'audit.db'));
   });
 
   afterEach(async () => {
     vi.useRealTimers();
     stateStore.close();
-    comms.close();
+    chatDb.close();
     audit.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('direct channel triggers CEO response when message posted to #board', async () => {
+  it('direct channel triggers CEO response when message posted to dm:ceo', async () => {
     const fixtureOrg = path.resolve(__dirname, '../fixtures/sample-org');
     const people = fixturePeople();
     const orgChart = await parseOrgFlat(fixtureOrg, people);
 
-    const channelManager = new ChannelManager(comms);
-
-    // Ensure #board channel exists so we can post to it
-    await channelManager.ensureChannel('board', ['super-user', 'ceo']);
+    // Ensure dm:ceo channel exists so we can post to it
+    const dmChannel = channelStore.ensureDm(0, 1); // super-user (0) → ceo (1)
 
     const daemon = new Daemon({
       orgChart,
-      comms,
+      chatAdapter,
       audit,
       state: stateStore,
-      channelManager,
       memory: mockMemory(),
       dataDir: tmpDir,
       orgDir: fixtureOrg,
@@ -107,9 +122,9 @@ describe('Daemon Integration', () => {
 
     await daemon.start();
 
-    // Post a message to #board (super-user → CEO)
-    await comms.postMessage('board', 'super-user', 'What is the status?');
-    daemon.signalChannel('board');
+    // Post a message to dm:ceo (super-user → CEO)
+    messageStore.send(dmChannel.id, 0, 'What is the status?');
+    daemon.signalChannel(dmChannel.id);
 
     // Advance past coalesce window
     vi.advanceTimersByTime(51);
@@ -129,17 +144,14 @@ describe('Daemon Integration', () => {
     const people = fixturePeople();
     const orgChart = await parseOrgFlat(fixtureOrg, people);
 
-    const channelManager = new ChannelManager(comms);
-
-    // Ensure #board channel exists
-    await channelManager.ensureChannel('board', ['super-user', 'ceo']);
+    // Ensure dm:ceo channel exists
+    const dmChannel = channelStore.ensureDm(0, 1); // super-user (0) → ceo (1)
 
     const daemon = new Daemon({
       orgChart,
-      comms,
+      chatAdapter,
       audit,
       state: stateStore,
-      channelManager,
       memory: mockMemory(),
       dataDir: tmpDir,
       orgDir: fixtureOrg,
@@ -152,7 +164,7 @@ describe('Daemon Integration', () => {
     await daemon.start();
 
     // Post a message but DON'T signal — wait for periodic tick
-    await comms.postMessage('board', 'super-user', 'Periodic check');
+    messageStore.send(dmChannel.id, 0, 'Periodic check');
 
     // Advance to trigger the 10-minute tick
     vi.advanceTimersByTime(600_001);

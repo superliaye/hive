@@ -97,7 +97,7 @@ function summarizeAction(
   const snippet = responseText.slice(0, 500);
   const args = buildClaudeArgs({
     model: 'haiku',
-    systemPrompt: 'Summarize what this agent did in 3-6 words. Output ONLY the summary, nothing else. Examples: "Delegated task to platform-eng", "Posted status update to #board", "Clarified routing issue"',
+    systemPrompt: 'Summarize what this agent did in 3-6 words. Output ONLY the summary, nothing else. Examples: "Delegated task to platform-eng", "Posted status update to dm:ceo", "Clarified routing issue"',
     outputFormat: 'json',
   });
 
@@ -204,12 +204,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     log(`triage: ACT_NOW=${actNow.length} NOTE=${notes.length} QUEUE=${queue.length} IGNORE=${ignore.length}`);
     for (const r of triageResults) log(`  ${r.messageId.slice(0, 8)}: ${r.classification} — ${r.reasoning}`);
 
-    // Process IGNORE — mark read
-    if (ignore.length > 0) {
-      await ctx.markRead(agent.person.alias, ignore.map(r => r.messageId));
-    }
-
-    // Process NOTE + QUEUE — append to memory, mark read
+    // Process NOTE + QUEUE — append to memory (but don't mark read yet — crash safety)
     const noteAndQueue = [...notes, ...queue];
     for (const result of noteAndQueue) {
       const msg = ranked.find(m => m.messageId === result.messageId);
@@ -219,7 +214,6 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       }
     }
     if (noteAndQueue.length > 0) {
-      await ctx.markRead(agent.person.alias, noteAndQueue.map(r => r.messageId));
       // Re-index memory after writing new notes
       ctx.memoryReindex?.(agent.person.alias, agent.dir).catch(() => {});
     }
@@ -336,6 +330,13 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       }
 
       await ctx.markRead(agent.person.alias, actNow.map(r => r.messageId));
+    }
+
+    // Mark all non-ACT_NOW messages as read AFTER all processing completes (crash safety).
+    // If daemon dies before this point, unread messages will be re-triaged on restart.
+    const nonActNow = [...ignore, ...noteAndQueue];
+    if (nonActNow.length > 0) {
+      await ctx.markRead(agent.person.alias, nonActNow.map(r => r.messageId));
     }
 
     // Return to idle

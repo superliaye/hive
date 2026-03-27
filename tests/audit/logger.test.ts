@@ -36,8 +36,8 @@ describe('AuditLogger', () => {
     };
 
     logger.logAgentInvocation('ceo', 'checkWork', 'sonnet', result, {
-      inputSummary: '1 ACT_NOW message(s) from #board',
-      channel: 'board',
+      inputSummary: '1 ACT_NOW message(s) from dm:ceo',
+      channel: 'dm:ceo',
     });
 
     const entries = store.getInvocations({ agentId: 'ceo' });

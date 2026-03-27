@@ -7,12 +7,15 @@ import type { Message, OrgMeta } from '../types';
 
 export function ChatPage() {
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
-  const { data: messages, setData } = useApi<Message[]>('/api/channels/board/messages?limit=100');
+  const channel = meta?.boardChannel;
+  const { data: messages, setData } = useApi<Message[]>(
+    channel ? `/api/channels/${channel}/messages?limit=100` : null,
+  );
   const [rootWorking, setRootWorking] = useState(false);
   const [sending, setSending] = useState(false);
 
   useSSEEvent('new-message', useCallback((event: any) => {
-    if (event.channel === 'board') {
+    if (channel && event.channel === channel) {
       setData(prev => {
         const exists = prev?.some(m => m.id === event.id);
         if (exists) return prev;
@@ -21,11 +24,11 @@ export function ChatPage() {
           sender: event.sender,
           content: event.content,
           timestamp: event.timestamp,
-          channel: 'board',
+          channel: event.channel,
         }];
       });
     }
-  }, [setData]));
+  }, [channel, setData]));
 
   // Track root agent (CEO) working status via agent-state SSE events
   useSSEEvent('agent-state', useCallback((event: any) => {
@@ -53,7 +56,7 @@ export function ChatPage() {
     <div className="flex flex-col h-full -m-3 md:-m-6">
       <div className="border-b border-slate-800 px-4 md:px-6 py-3 shrink-0">
         <h2 className="text-lg font-medium text-slate-200">{rootName} Chat</h2>
-        <p className="text-xs text-slate-500 font-mono">#board</p>
+        <p className="text-xs text-slate-500 font-mono">Direct message</p>
       </div>
       <ChatFeed messages={messages ?? []} rootWorking={rootWorking} rootName={rootName} />
       <ChatInput onSend={sendMessage} disabled={sending} rootName={rootName} />

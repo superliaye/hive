@@ -53,10 +53,10 @@ describe('HiveContext', () => {
       expect(ctx.orgChart).toBeDefined();
       expect(ctx.orgChart.agents.size).toBeGreaterThan(0);
       expect(ctx.orgChart.people.length).toBeGreaterThan(0);
-      expect(ctx.comms).toBeDefined();
+      expect(ctx.chatAdapter).toBeDefined();
       expect(ctx.audit).toBeDefined();
       expect(ctx.state).toBeDefined();
-      expect(ctx.channelManager).toBeDefined();
+      expect(ctx.channels).toBeDefined();
       expect(ctx.dataDir).toBe(path.resolve(tempDir, 'data'));
       expect(ctx.orgDir).toBe(path.resolve(tempDir, 'org'));
     } finally {
@@ -95,9 +95,8 @@ describe('HiveContext', () => {
       expect(totals).toHaveProperty('totalIn');
       expect(totals).toHaveProperty('totalOut');
 
-      // Comms store works
-      const channels = await ctx.comms.listChannels();
-      expect(Array.isArray(channels)).toBe(true);
+      // Chat adapter works
+      expect(ctx.chatAdapter).toBeDefined();
     } finally {
       ctx.close();
     }

@@ -32,7 +32,7 @@ describe('AuditStore', () => {
       tokensIn: 1000,
       tokensOut: 500,
       durationMs: 3000,
-      inputSummary: 'Check board messages',
+      inputSummary: 'Check dm:ceo messages',
       outputSummary: 'Reviewed 3 messages',
     });
 
@@ -68,7 +68,7 @@ describe('AuditStore', () => {
   it('stores null for cache tokens when not provided', () => {
     store.logInvocation({
       agentId: 'eng-1',
-      invocationType: 'comms',
+      invocationType: 'main',
       model: 'n/a',
     });
 

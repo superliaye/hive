@@ -87,7 +87,7 @@ describe('scaffold', () => {
   it('CEO has correct skills declared', () => {
     scaffold({ targetDir: tmpDir, mission: 'Skills test' });
     const content = fs.readFileSync(path.join(tmpDir, 'org', '1-ceo', 'IDENTITY.md'), 'utf-8');
-    expect(content).toContain('board-protocol');
+    expect(content).toContain('super-user-comms');
     expect(content).toContain('hive-comms');
     expect(content).toContain('plan-review');
   });

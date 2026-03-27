@@ -2254,7 +2254,7 @@ git commit -m "feat(chat): add CLI subcommands and barrel export"
 
 - [ ] **Step 1: Wire chat command into main CLI**
 
-In `src/cli.ts`, add the import and register the chat command. The existing `hive chat <message>` command posts to #board — this needs to be replaced with the new chat subcommand tree.
+In `src/cli.ts`, add the import and register the chat command. The existing `hive chat <message>` command posts to dm:ceo — this needs to be replaced with the new chat subcommand tree.
 
 Find the existing `chat` command registration in `src/cli.ts` and replace it:
 

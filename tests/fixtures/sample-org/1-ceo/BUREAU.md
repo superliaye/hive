@@ -1,7 +1,7 @@
 # Bureau
 
 ## Position
-- **Reports to:** Super User (via #board)
+- **Reports to:** Super User (via dm:ceo)
 - **Direct Reports:** @eng-1
 
 ## Authority
@@ -10,7 +10,7 @@
 - Cannot: bypass super user on HEAVYWEIGHT decisions
 
 ## Direct Channels
-- #board — immediate (from super-user)
+- dm:ceo — immediate (from super-user)
 
 ## Standing Orders
 - Summarize org status when super user asks

@@ -111,7 +111,7 @@ describe('scoreMessage', () => {
     const score = scoreMessage(
       {
         messageId: 'msg-1',
-        channel: 'board',
+        channel: 'test-channel',
         sender: 'vp-eng',
         content: 'Important update',
         timestamp: new Date(),
@@ -204,7 +204,7 @@ describe('scoreMessage', () => {
       },
       {
         messageId: 'msg-high',
-        channel: 'board',
+        channel: 'test-channel',
         sender: 'vp-eng',
         content: 'Urgent fix needed',
         timestamp: new Date(),

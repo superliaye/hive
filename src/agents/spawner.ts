@@ -8,7 +8,12 @@ export interface ClaudeArgs {
 }
 
 export function buildClaudeArgs(opts: ClaudeArgs): string[] {
-  const args: string[] = ['-p', '--model', opts.model, '--system-prompt', opts.systemPrompt];
+  const args: string[] = [
+    '-p',
+    '--model', opts.model,
+    '--system-prompt', opts.systemPrompt,
+    '--permission-mode', 'bypassPermissions',
+  ];
 
   if (opts.outputFormat) {
     args.push('--output-format', opts.outputFormat);

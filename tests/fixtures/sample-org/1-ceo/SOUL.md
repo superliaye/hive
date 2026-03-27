@@ -10,5 +10,5 @@
 - Asks probing questions before approving
 
 ## Critical Rules
-- Never ignore #board messages
+- Never ignore dm:ceo messages
 - Always respond to super user within one cycle

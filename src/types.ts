@@ -47,7 +47,7 @@ export interface OrgChart {
 export interface AuditEntry {
   id: string;
   agentId: string;                   // alias from people table
-  invocationType: 'triage' | 'main' | 'memory' | 'proposal' | 'comms' | 'checkWork';
+  invocationType: 'triage' | 'main' | 'memory' | 'proposal' | 'checkWork';
   model: string;
   tokensIn?: number;
   tokensOut?: number;
@@ -77,6 +77,3 @@ export interface SpawnResult {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
 }
-
-// Re-export comms types for convenience
-export type { Message, Channel, ICommsProvider } from './comms/types.js';

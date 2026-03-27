@@ -9,7 +9,7 @@ export interface SkillResolution {
  * Resolve skills for an agent from the top-level role-skills/ directory.
  *
  * @param roleSkillsDir - Path to role-skills/ directory at repo root
- * @param declaredSkills - Skill names from config.json (e.g. ["hive-comms", "board-protocol"])
+ * @param declaredSkills - Skill names from config.json (e.g. ["hive-comms", "super-user-comms"])
  *
  * Directory layout:
  *   role-skills/<skill-name>/SKILL.md

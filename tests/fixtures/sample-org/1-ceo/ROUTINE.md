@@ -1,7 +1,7 @@
 # Routine
 
 ## Heartbeat (every 10min)
-- Check #board for super user messages
+- Check dm:ceo for super user messages
 - Check #leadership for reports' updates
 - Review pending proposals
 

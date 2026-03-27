@@ -14,6 +14,15 @@ describe('buildClaudeArgs', () => {
     expect(args).toContain('You are a test agent.');
   });
 
+  it('includes --permission-mode bypassPermissions', () => {
+    const args = buildClaudeArgs({
+      model: 'sonnet',
+      systemPrompt: 'Agent prompt.',
+    });
+    expect(args).toContain('--permission-mode');
+    expect(args).toContain('bypassPermissions');
+  });
+
   it('includes output-format json when specified', () => {
     const args = buildClaudeArgs({
       model: 'haiku',

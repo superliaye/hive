@@ -188,7 +188,7 @@ export function resolveSkillsForAgent(
 
 Update `org/ceo/IDENTITY.md` frontmatter:
 ```yaml
-skills: [board-protocol, delegation, prioritization, comms, escalation, scope-guard, skeptic-review, status-protocol]
+skills: [super-user-comms, delegation, prioritization, comms, escalation, scope-guard, skeptic-review, status-protocol]
 ```
 
 Update `org/ceo/engineering/platform-eng/IDENTITY.md` frontmatter:

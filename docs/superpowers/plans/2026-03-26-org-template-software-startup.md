@@ -260,7 +260,7 @@ function createRoleTemplates(baseDir: string): string {
 
   const roles: Record<string, { config: object; identity: string }> = {
     'chief-executive': {
-      config: { name: 'Chief Executive Officer', model: 'claude-opus-4-6', emoji: '👔', skills: ['hive-comms', 'board-protocol', 'plan-review'] },
+      config: { name: 'Chief Executive Officer', model: 'claude-opus-4-6', emoji: '👔', skills: ['hive-comms', 'super-user-comms', 'plan-review'] },
       identity: '# CEO\n\nYou are the CEO.',
     },
     'agent-resources': {
@@ -303,7 +303,7 @@ function createRoleTemplates(baseDir: string): string {
 function createRoleSkills(baseDir: string): string {
   const roleSkillsDir = path.join(baseDir, 'role-skills');
   const skills = [
-    'hive-comms', 'board-protocol', 'plan-review', 'agent-provisioning',
+    'hive-comms', 'super-user-comms', 'plan-review', 'agent-provisioning',
     'org-health', 'retro', 'code-lifecycle', 'test-strategy',
     'product-review', 'spec-writing',
   ];

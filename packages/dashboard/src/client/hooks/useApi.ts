@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export function useApi<T>(url: string, opts?: { refreshInterval?: number }) {
+export function useApi<T>(url: string | null, opts?: { refreshInterval?: number }) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
+    if (!url) return;
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -19,12 +20,16 @@ export function useApi<T>(url: string, opts?: { refreshInterval?: number }) {
   }, [url]);
 
   useEffect(() => {
+    if (!url) {
+      setLoading(true);
+      return;
+    }
     refetch();
     if (opts?.refreshInterval) {
       const id = setInterval(refetch, opts.refreshInterval);
       return () => clearInterval(id);
     }
-  }, [refetch, opts?.refreshInterval]);
+  }, [refetch, url, opts?.refreshInterval]);
 
   return { data, loading, error, refetch, setData };
 }

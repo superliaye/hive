@@ -314,7 +314,7 @@ Super-user sends messages via CLI (`HIVE_AGENT_ID=0`) or dashboard (which calls 
 
 ### Access Control
 
-- Only CEO (+ optionally department heads) can message super-user (id=0)
+- Only CEO (+ optionally managers) can message super-user (id=0)
 - Super-user cannot be added to groups
 - Agents can only see/search channels they are members of
 - Any member can add/remove members from groups they belong to
