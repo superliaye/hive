@@ -104,8 +104,12 @@ export class ChatAdapter {
         throw new Error(`Invalid synthetic message ID: "${syntheticId}"`);
       }
       const channelId = syntheticId.slice(0, lastColon);
-      const seq = Number(syntheticId.slice(lastColon + 1));
-      if (Number.isNaN(seq)) {
+      const seqStr = syntheticId.slice(lastColon + 1);
+      if (seqStr === '') {
+        throw new Error(`Invalid synthetic message ID: "${syntheticId}"`);
+      }
+      const seq = parseInt(seqStr, 10);
+      if (Number.isNaN(seq) || seq <= 0) {
         throw new Error(`Invalid seq in message ID: "${syntheticId}"`);
       }
 
