@@ -2,8 +2,12 @@ import path from 'path';
 import fs from 'fs';
 import { parseOrgFlat } from './org/parser.js';
 import { ChatDb } from './chat/db.js';
-import { SqliteCommsProvider } from './comms/sqlite-provider.js';
-import { ChannelManager } from './comms/channel-manager.js';
+import { ChannelStore } from './chat/channels.js';
+import { MessageStore } from './chat/messages.js';
+import { CursorStore } from './chat/cursors.js';
+import { SearchEngine } from './chat/search.js';
+import { AccessControl } from './chat/access.js';
+import { ChatAdapter } from './chat/adapter.js';
 import { AuditStore } from './audit/store.js';
 import { AgentStateStore } from './state/agent-state.js';
 import { MemoryManager } from './memory/manager.js';
@@ -11,10 +15,14 @@ import type { OrgChart, Person } from './types.js';
 
 export class HiveContext {
   readonly orgChart: OrgChart;
-  readonly comms: SqliteCommsProvider;
+  readonly channels: ChannelStore;
+  readonly messages: MessageStore;
+  readonly cursors: CursorStore;
+  readonly search: SearchEngine;
+  readonly access: AccessControl;
+  readonly chatAdapter: ChatAdapter;
   readonly audit: AuditStore;
   readonly state: AgentStateStore;
-  readonly channelManager: ChannelManager;
   readonly memory: MemoryManager;
   readonly chatDb: ChatDb;
   readonly dataDir: string;
@@ -22,20 +30,28 @@ export class HiveContext {
 
   private constructor(opts: {
     orgChart: OrgChart;
-    comms: SqliteCommsProvider;
+    channels: ChannelStore;
+    messages: MessageStore;
+    cursors: CursorStore;
+    search: SearchEngine;
+    access: AccessControl;
+    chatAdapter: ChatAdapter;
     audit: AuditStore;
     state: AgentStateStore;
-    channelManager: ChannelManager;
     memory: MemoryManager;
     chatDb: ChatDb;
     dataDir: string;
     orgDir: string;
   }) {
     this.orgChart = opts.orgChart;
-    this.comms = opts.comms;
+    this.channels = opts.channels;
+    this.messages = opts.messages;
+    this.cursors = opts.cursors;
+    this.search = opts.search;
+    this.access = opts.access;
+    this.chatAdapter = opts.chatAdapter;
     this.audit = opts.audit;
     this.state = opts.state;
-    this.channelManager = opts.channelManager;
     this.memory = opts.memory;
     this.chatDb = opts.chatDb;
     this.dataDir = opts.dataDir;
@@ -71,19 +87,36 @@ export class HiveContext {
     const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
     const people = HiveContext.loadPeople(chatDb);
     const orgChart = await parseOrgFlat(orgDir, people);
-    const comms = new SqliteCommsProvider(path.join(dataDir, 'comms.db'));
+
+    const channelStore = new ChannelStore(chatDb);
+    const messageStore = new MessageStore(chatDb);
+    const cursorStore = new CursorStore(chatDb);
+    const searchEngine = new SearchEngine(chatDb);
+    const accessControl = new AccessControl(chatDb);
+    const chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
+
     const audit = new AuditStore(path.join(dataDir, 'audit.db'));
     const state = new AgentStateStore(path.join(dataDir, 'orchestrator.db'));
-    const channelManager = new ChannelManager(comms);
     const memory = new MemoryManager(dataDir);
 
     return new HiveContext({
-      orgChart, comms, audit, state, channelManager, memory, chatDb, dataDir, orgDir,
+      orgChart,
+      channels: channelStore,
+      messages: messageStore,
+      cursors: cursorStore,
+      search: searchEngine,
+      access: accessControl,
+      chatAdapter,
+      audit,
+      state,
+      memory,
+      chatDb,
+      dataDir,
+      orgDir,
     });
   }
 
   close(): void {
-    this.comms.close();
     this.audit.close();
     this.state.close();
     this.memory.close();

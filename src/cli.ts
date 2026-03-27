@@ -2,12 +2,15 @@ import { Command } from 'commander';
 import { parseOrgFlat } from './org/parser.js';
 import { scaffold } from './org/scaffold.js';
 import { provision, validateProvision } from './org/provision.js';
-import { SqliteCommsProvider } from './comms/sqlite-provider.js';
-import { ChannelManager } from './comms/channel-manager.js';
-import { MessageGateway } from './comms/message-gateway.js';
-import { chatAction, observeAction, formatMessage, startFollowing } from './comms/cli-commands.js';
 import { HiveContext } from './context.js';
 import { ChatDb } from './chat/db.js';
+import { ChannelStore } from './chat/channels.js';
+import { MessageStore } from './chat/messages.js';
+import { CursorStore } from './chat/cursors.js';
+import { SearchEngine } from './chat/search.js';
+import { AccessControl } from './chat/access.js';
+import { ChatAdapter } from './chat/adapter.js';
+import { buildChatCommand } from './chat/cli.js';
 import { MemoryManager } from './memory/manager.js';
 import chalk from 'chalk';
 import path from 'path';
@@ -296,10 +299,11 @@ program
       console.log('');
     }
 
-    // Auto-wire comms provider from SQLite
-    const commsDb = path.join(dataDir, 'comms.db');
-    const commsProvider = new SqliteCommsProvider(commsDb);
-    const channelManager = new ChannelManager(commsProvider);
+    // Wire chat stores and adapter
+    const channelStore = new ChannelStore(chatDb);
+    const messageStore = new MessageStore(chatDb);
+    const cursorStore = new CursorStore(chatDb);
+    const chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
     const stateStore = new AgentStateStore(path.join(dataDir, 'orchestrator.db'));
     const auditStore = new AuditStore(path.join(dataDir, 'audit.db'));
 
@@ -307,10 +311,9 @@ program
 
     const daemon = new Daemon({
       orgChart,
-      comms: commsProvider,
+      chatAdapter,
       audit: auditStore,
       state: stateStore,
-      channelManager,
       memory: memoryManager,
       dataDir,
       orgDir,
@@ -319,14 +322,6 @@ program
     });
 
     await daemon.start();
-
-    // Hook: signal daemon on every new message for direct channel detection
-    const originalPostMessage = commsProvider.postMessage.bind(commsProvider);
-    commsProvider.postMessage = async (channel: string, sender: string, content: string, postOpts?: { thread?: string }) => {
-      const msg = await originalPostMessage(channel, sender, content, postOpts);
-      daemon.signalChannel(channel);
-      return msg;
-    };
 
     console.log(chalk.green(`Hive daemon started (PID: ${process.pid})`));
     console.log(chalk.dim(`Agents: ${Array.from(orgChart.agents.keys()).join(', ')}`));
@@ -337,7 +332,6 @@ program
       console.log(chalk.yellow(`\nReceived ${signal}. Shutting down gracefully...`));
       await daemon.stop();
       stateStore.close();
-      commsProvider.close();
       auditStore.close();
       chatDb.close();
       console.log(chalk.green('Hive stopped.'));
@@ -379,121 +373,17 @@ program
     }
   });
 
-program
-  .command('chat')
-  .description('Send a message to the CEO via #board')
-  .argument('<message>', 'Message to send to the CEO')
-  .action(async (message: string) => {
-    const ctx = await HiveContext.create();
-    const gateway = new MessageGateway(ctx.comms, ctx.audit);
-
-    console.log(chalk.dim(`> super-user: ${message}`));
-
-    try {
-      const result = await chatAction({
-        message,
-        gateway,
-      });
-
-      console.log(chalk.green(`Message posted to #board.`));
-      console.log(chalk.dim(`CEO will respond via daemon. Run: hive observe board -f`));
-    } catch (err: any) {
-      console.error(chalk.red(`Error: ${err.message}`));
-    } finally {
-      ctx.close();
-    }
-  });
-
-program
-  .command('post')
-  .description('Post a message to any channel as any agent')
-  .requiredOption('--channel <channel>', 'Channel name (without #)')
-  .requiredOption('--as <sender>', 'Agent ID to send as')
-  .option('--port <port>', 'Dashboard port for daemon notification', '3001')
-  .argument('<message>', 'Message content')
-  .action(async (message: string, opts: { channel: string; as: string; port: string }) => {
-    // Try dashboard API first (notifies daemon via signalChannel)
-    try {
-      const res = await fetch(`http://localhost:${opts.port}/api/chat/post`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel: opts.channel, sender: opts.as, message }),
-      });
-      if (res.ok) {
-        console.log(chalk.green(`Posted to #${opts.channel} as @${opts.as}`));
-        return;
-      }
-    } catch {
-      // Dashboard not running — fall back to direct SQLite
-    }
-
-    // Fallback: write directly to SQLite (daemon won't be notified until next tick)
-    const ctx = await HiveContext.create();
-    try {
-      await ctx.comms.postMessage(opts.channel, opts.as, message);
-      console.log(chalk.green(`Posted to #${opts.channel} as @${opts.as}`));
-      console.log(chalk.dim('(daemon not notified — will pick up on next tick)'));
-    } catch (err: any) {
-      console.error(chalk.red(`Error: ${err.message}`));
-    } finally {
-      ctx.close();
-    }
-  });
-
-program
-  .command('observe')
-  .description('Watch a channel\'s messages (tail -f style)')
-  .argument('<channel>', 'Channel name to observe (without #)')
-  .option('-n, --limit <number>', 'Number of recent messages to show', '20')
-  .option('-f, --follow', 'Follow new messages in real-time', false)
-  .action(async (channel: string, opts: { limit: string; follow: boolean }) => {
-    const ctx = await HiveContext.create();
-    const gateway = new MessageGateway(ctx.comms, ctx.audit);
-    const limit = parseInt(opts.limit, 10);
-
-    console.log(chalk.underline(`\n#${channel}\n`));
-
-    try {
-      const result = await observeAction({
-        channel,
-        gateway,
-        follow: opts.follow,
-        limit,
-      });
-
-      if (result.formatted) {
-        console.log(result.formatted);
-      } else {
-        console.log(chalk.dim('(no messages)'));
-      }
-
-      if (opts.follow) {
-        console.log(chalk.dim('\n--- following (Ctrl+C to stop) ---\n'));
-
-        const controller = startFollowing(
-          channel,
-          gateway,
-          (formatted) => console.log(formatted),
-          1000,
-        );
-
-        process.on('SIGINT', () => {
-          controller.abort();
-          console.log(chalk.dim('\nStopped observing.'));
-          ctx.close();
-          process.exit(0);
-        });
-
-        await new Promise(() => {});
-      }
-    } catch (err: any) {
-      console.error(chalk.red(`Error: ${err.message}`));
-    } finally {
-      if (!opts.follow) {
-        ctx.close();
-      }
-    }
-  });
+// Wire the new hive chat subcommand tree (send, inbox, ack, history, search, group)
+{
+  const dataDir = getDataDir();
+  const chatDb = new ChatDb(path.join(dataDir, 'hive.db'));
+  const channels = new ChannelStore(chatDb);
+  const messages = new MessageStore(chatDb);
+  const cursors = new CursorStore(chatDb);
+  const search = new SearchEngine(chatDb);
+  const access = new AccessControl(chatDb);
+  program.addCommand(buildChatCommand({ db: chatDb, channels, messages, cursors, search, access }));
+}
 
 program
   .command('memory')

@@ -1,27 +1,57 @@
 import { Command } from 'commander';
 import type { ChatDb } from './db.js';
-import { ChannelStore } from './channels.js';
-import { MessageStore } from './messages.js';
-import { CursorStore } from './cursors.js';
-import { SearchEngine } from './search.js';
-import { AccessControl } from './access.js';
+import type { ChannelStore } from './channels.js';
+import type { MessageStore } from './messages.js';
+import type { CursorStore } from './cursors.js';
+import type { SearchEngine } from './search.js';
+import type { AccessControl } from './access.js';
 import type { ChatMessage } from './types.js';
 
-function getCallerId(): number {
-  return AccessControl.requireIdentity(process.env.HIVE_AGENT_ID);
+export interface ChatCliDeps {
+  db: ChatDb;
+  channels: ChannelStore;
+  messages: MessageStore;
+  cursors: CursorStore;
+  search: SearchEngine;
+  access: AccessControl;
+  /** Dashboard port for signaling daemon on new messages */
+  dashboardPort?: number;
 }
 
-function formatMessage(msg: ChatMessage): string {
-  const ts = msg.timestamp?.replace('T', ' ').replace(/\.\d+Z?$/, '') ?? '';
-  return `${msg.channelId} | ${msg.senderAlias} | seq:${msg.seq} | ${ts} | ${msg.content}`;
+/**
+ * Resolve HIVE_AGENT_ID env var to a person identity (id + alias).
+ */
+function getCallerIdentity(access: AccessControl): { id: number; alias: string } {
+  const envId = process.env.HIVE_AGENT_ID;
+  if (!envId) throw new Error('HIVE_AGENT_ID not set. Are you running inside a hive agent?');
+  const person = access.resolvePerson(envId);
+  return { id: person.id, alias: person.alias };
 }
 
-export function buildChatCommand(db: ChatDb): Command {
-  const channelStore = new ChannelStore(db);
-  const msgStore = new MessageStore(db);
-  const cursorStore = new CursorStore(db);
-  const searchEngine = new SearchEngine(db);
-  const access = new AccessControl(db);
+function formatMsg(msg: ChatMessage): string {
+  const ts = String(msg.timestamp).replace('T', ' ').slice(0, 19);
+  return `${ts} | ${msg.senderAlias} | ${msg.channelId} | ${msg.content}`;
+}
+
+/**
+ * Signal the daemon that a new message arrived on a channel.
+ * Best-effort: if dashboard isn't running, the daemon will pick it up on next tick.
+ */
+async function signalDaemon(channel: string, port: number): Promise<void> {
+  try {
+    await fetch(`http://localhost:${port}/api/signal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel }),
+    });
+  } catch {
+    // Dashboard not running — daemon will pick up on next tick
+  }
+}
+
+export function buildChatCommand(deps: ChatCliDeps): Command {
+  const { channels, messages, cursors, search, access } = deps;
+  const port = deps.dashboardPort ?? 3001;
 
   const chat = new Command('chat')
     .description('Messaging system for agent communication');
@@ -43,55 +73,62 @@ export function buildChatCommand(db: ChatDb): Command {
         throw new Error('Message is required. Provide as argument or pipe via stdin.');
       }
 
-      const callerId = getCallerId();
+      const caller = getCallerIdentity(access);
+      const channelId = channels.resolveTarget(target, caller.id);
 
-      // Validate before resolving (resolveTarget lazily creates DMs)
-      if (target.startsWith('@')) {
-        const alias = target.slice(1);
-        const person = access.resolvePerson(alias);
-        access.validateSend(callerId, person.id);
-      }
+      const msg = messages.send(channelId, caller.id, message);
 
-      const channelId = channelStore.resolveTarget(target, callerId);
+      // Signal daemon for immediate pickup
+      await signalDaemon(channelId, port);
 
-      if (target.startsWith('#')) {
-        access.requireMembership(callerId, channelId);
-      }
-
-      const msg = msgStore.send(channelId, callerId, message);
-      process.stdout.write(`Sent seq ${msg.seq} to ${channelId}\n`);
+      process.stdout.write(`Sent to ${channelId} (seq: ${msg.seq})\n`);
     });
 
   // --- inbox ---
   chat
     .command('inbox')
     .description('Show unread messages grouped by channel')
-    .action(() => {
-      const callerId = getCallerId();
-      const groups = cursorStore.getUnread(callerId);
+    .action(async () => {
+      const caller = getCallerIdentity(access);
+      const unreadGroups = cursors.getUnread(caller.id);
 
-      if (groups.length === 0) {
+      if (unreadGroups.length === 0) {
         process.stdout.write('No unread messages\n');
         return;
       }
 
-      for (const group of groups) {
+      for (const group of unreadGroups) {
         process.stdout.write(`\n--- ${group.channelId} (${group.messages.length} unread) ---\n`);
         for (const msg of group.messages) {
-          process.stdout.write(formatMessage(msg) + '\n');
+          process.stdout.write(formatMsg(msg) + '\n');
         }
       }
     });
 
   // --- ack ---
   chat
-    .command('ack <target> <seq>')
-    .description('Advance read cursor. @alias for DM, #group for group.')
-    .action((target: string, seqStr: string) => {
-      const callerId = getCallerId();
-      const channelId = channelStore.resolveExistingTarget(target, callerId);
-      cursorStore.ack(callerId, channelId, Number(seqStr));
-      process.stdout.write(`Cursor advanced to seq ${seqStr} on ${channelId}\n`);
+    .command('ack <target> [seq]')
+    .description('Mark messages as read. If no seq, marks all unread in that channel.')
+    .action(async (target: string, seqStr?: string) => {
+      const caller = getCallerIdentity(access);
+      const channelId = channels.resolveExistingTarget(target, caller.id);
+
+      if (seqStr) {
+        const seq = parseInt(seqStr, 10);
+        cursors.ack(caller.id, channelId, seq);
+        process.stdout.write(`Marked up to seq ${seq} as read in ${channelId}\n`);
+      } else {
+        // Find max seq from unread in this channel
+        const unreadGroups = cursors.getUnread(caller.id);
+        const group = unreadGroups.find(g => g.channelId === channelId);
+        if (!group || group.messages.length === 0) {
+          process.stdout.write(`No unread messages in ${channelId}\n`);
+          return;
+        }
+        const maxSeq = group.messages[group.messages.length - 1].seq;
+        cursors.ack(caller.id, channelId, maxSeq);
+        process.stdout.write(`Marked ${group.messages.length} messages as read in ${channelId}\n`);
+      }
     });
 
   // --- history ---
@@ -99,80 +136,61 @@ export function buildChatCommand(db: ChatDb): Command {
     .command('history <target>')
     .description('Show message history. @alias for DM, #group for group.')
     .option('--limit <n>', 'Max messages to return', '20')
-    .option('--from <seq>', 'Start from this seq (inclusive)')
-    .option('--to <seq>', 'End at this seq (inclusive)')
-    .option('--all', 'Show all messages')
-    .action((target: string, opts: any) => {
-      const callerId = getCallerId();
-      const channelId = channelStore.resolveExistingTarget(target, callerId);
-      access.requireMembership(callerId, channelId);
+    .action(async (target: string, opts: any) => {
+      const caller = getCallerIdentity(access);
+      const channelId = channels.resolveExistingTarget(target, caller.id);
+      const limit = Number(opts.limit);
+      const result = messages.history(channelId, { limit });
 
-      const result = msgStore.history(channelId, {
-        limit: opts.all ? undefined : Number(opts.limit),
-        from: opts.from ? Number(opts.from) : undefined,
-        to: opts.to ? Number(opts.to) : undefined,
-        all: opts.all,
-      });
+      if (result.messages.length === 0) {
+        process.stdout.write(`No messages in ${channelId}\n`);
+        return;
+      }
 
-      const count = result.messages.length;
-      process.stdout.write(
-        `Showing ${count} of ${result.total} messages in ${channelId} (seq ${result.showing.from}-${result.showing.to})\n\n`
-      );
-
+      process.stdout.write(`Showing ${result.messages.length} of ${result.total} messages in ${channelId}\n\n`);
       for (const msg of result.messages) {
-        process.stdout.write(formatMessage(msg) + '\n');
+        process.stdout.write(formatMsg(msg) + '\n');
       }
     });
 
   // --- search ---
   chat
-    .command('search [scope] [pattern]')
-    .description('Search messages. Scope: @alias (DM), #group. Pattern: literal or regex.')
-    .option('--from <alias>', 'Filter by sender alias')
-    .option('--after <date>', 'After date (YYYY-MM-DD)')
-    .option('--before <date>', 'Before date (YYYY-MM-DD)')
-    .option('-i', 'Case insensitive')
-    .option('-E', 'Extended regex mode')
+    .command('search [pattern]')
+    .description('Search messages across channels')
+    .option('--channel <target>', 'Scope to a channel (@alias or #group)')
+    .option('--from <alias>', 'Filter by sender')
     .option('--limit <n>', 'Max results', '20')
-    .option('--offset <n>', 'Skip first N results', '0')
-    .action((scope: string | undefined, pattern: string | undefined, opts: any) => {
-      const callerId = getCallerId();
+    .action(async (pattern: string | undefined, opts: any) => {
+      const caller = getCallerIdentity(access);
 
       let scopeChannelId: string | undefined;
-      let actualPattern = pattern;
-
-      if (scope && !scope.startsWith('@') && !scope.startsWith('#')) {
-        actualPattern = scope;
-        scopeChannelId = undefined;
-      } else if (scope) {
-        scopeChannelId = channelStore.resolveExistingTarget(scope, callerId);
+      if (opts.channel) {
+        scopeChannelId = channels.resolveExistingTarget(opts.channel, caller.id);
       }
 
       let fromPersonId: number | undefined;
       if (opts.from) {
         const fromAlias = opts.from.startsWith('@') ? opts.from.slice(1) : opts.from;
-        fromPersonId = access.resolvePerson(fromAlias).id;
+        const person = access.resolvePerson(fromAlias);
+        fromPersonId = person.id;
       }
 
-      const result = searchEngine.search({
-        pattern: actualPattern,
-        callerId,
+      if (!pattern && !scopeChannelId && fromPersonId === undefined) {
+        process.stderr.write('Pattern is required (or use --channel / --from to scope)\n');
+        process.exit(1);
+      }
+
+      const result = search.search({
+        callerId: caller.id,
+        pattern,
         scopeChannelId,
         fromPersonId,
-        after: opts.after,
-        before: opts.before,
-        caseInsensitive: opts.i || false,
-        regex: opts.E || false,
         limit: Number(opts.limit),
-        offset: Number(opts.offset),
       });
 
-      const start = Number(opts.offset) + 1;
-      const end = start + result.messages.length - 1;
-      process.stdout.write(`Found ${result.total} results (showing ${start}-${end})\n\n`);
-
+      process.stdout.write(`Found ${result.total} results (showing ${result.messages.length})\n\n`);
       for (const msg of result.messages) {
-        process.stdout.write(formatMessage(msg) + '\n');
+        process.stdout.write(formatMsg(msg) + '\n');
       }
     });
 
@@ -184,80 +202,31 @@ export function buildChatCommand(db: ChatDb): Command {
   group
     .command('create <name> <members...>')
     .description('Create a group channel. Members: @alias @alias ...')
-    .action((name: string, members: string[]) => {
-      const callerId = getCallerId();
+    .action(async (name: string, members: string[]) => {
+      const caller = getCallerIdentity(access);
       const memberIds = members.map(m => {
         const alias = m.startsWith('@') ? m.slice(1) : m;
         return access.resolvePerson(alias).id;
       });
-      channelStore.createGroup(name, callerId, memberIds);
-      process.stdout.write(`Group #${name} created with ${new Set([...memberIds, callerId]).size} members\n`);
+      const ch = channels.createGroup(name, caller.id, memberIds);
+      const totalMembers = new Set([caller.id, ...memberIds]).size;
+      process.stdout.write(`Group #${name} created with ${totalMembers} members\n`);
     });
 
   group
     .command('list')
-    .description('List groups you belong to')
-    .action(() => {
-      const callerId = getCallerId();
-      const groups = channelStore.listGroups(callerId);
+    .description('List channels you belong to')
+    .action(async () => {
+      const caller = getCallerIdentity(access);
+      const groups = channels.listGroups(caller.id);
       if (groups.length === 0) {
-        process.stdout.write('No groups\n');
+        process.stdout.write('No channels\n');
         return;
       }
-      for (const g of groups) {
-        process.stdout.write(`#${g.id}\n`);
+      for (const ch of groups) {
+        const members = channels.getMembers(ch.id);
+        process.stdout.write(`${ch.id} (${members.length} members)\n`);
       }
-    });
-
-  group
-    .command('info <name>')
-    .description('Show group details')
-    .action((name: string) => {
-      const callerId = getCallerId();
-      const groupName = name.startsWith('#') ? name.slice(1) : name;
-      access.requireMembership(callerId, groupName);
-      const info = channelStore.getGroupInfo(groupName);
-      process.stdout.write(`Group: #${info.id}\n`);
-      process.stdout.write(`Created by: person ${info.createdBy}\n`);
-      process.stdout.write(`Members (${info.memberCount}): ${info.members.map(m => '@' + m.alias).join(', ')}\n`);
-      process.stdout.write(`Messages: ${info.messageCount}\n`);
-    });
-
-  group
-    .command('add <name> <alias>')
-    .description('Add member to group')
-    .action((name: string, alias: string) => {
-      const callerId = getCallerId();
-      const groupName = name.startsWith('#') ? name.slice(1) : name;
-      access.requireMembership(callerId, groupName);
-      const cleanAlias = alias.startsWith('@') ? alias.slice(1) : alias;
-      const person = access.resolvePerson(cleanAlias);
-      channelStore.addMember(groupName, person.id);
-      process.stdout.write(`Added @${person.alias} to #${groupName}\n`);
-    });
-
-  group
-    .command('remove <name> <alias>')
-    .description('Remove member from group (use your own alias to leave)')
-    .action((name: string, alias: string) => {
-      const callerId = getCallerId();
-      const groupName = name.startsWith('#') ? name.slice(1) : name;
-      access.requireMembership(callerId, groupName);
-      const cleanAlias = alias.startsWith('@') ? alias.slice(1) : alias;
-      const person = access.resolvePerson(cleanAlias);
-      channelStore.removeMember(groupName, person.id);
-      process.stdout.write(`Removed @${person.alias} from #${groupName}\n`);
-    });
-
-  group
-    .command('delete <name>')
-    .description('Delete group (messages preserved for audit)')
-    .action((name: string) => {
-      const callerId = getCallerId();
-      const groupName = name.startsWith('#') ? name.slice(1) : name;
-      access.requireMembership(callerId, groupName);
-      channelStore.deleteGroup(groupName);
-      process.stdout.write(`Group #${groupName} deleted\n`);
     });
 
   return chat;
