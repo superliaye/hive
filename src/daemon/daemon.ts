@@ -1,7 +1,6 @@
 import type { DaemonConfig, CheckWorkResult } from './types.js';
 import type { AgentConfig } from '../types.js';
 import { LaneManager } from './lane.js';
-import { DirectChannelRegistry, parseBureauDirectChannels } from './direct-channel.js';
 import { checkWork, type CheckWorkContext } from './check-work.js';
 import { PidFile } from '../orchestrator/pid-file.js';
 import { recoverStaleAgents, formatRecoveryAlert } from '../orchestrator/crash-recovery.js';
@@ -15,7 +14,7 @@ export class Daemon {
   private config: DaemonConfig;
   private pidFile: PidFile;
   private lanes = new LaneManager();
-  private directChannels: DirectChannelRegistry;
+  private coalesceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private running = false;
   private tickTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private crashHistory = new Map<string, number[]>();
@@ -25,11 +24,6 @@ export class Daemon {
   constructor(config: DaemonConfig) {
     this.config = config;
     this.pidFile = new PidFile(config.pidFilePath);
-
-    this.directChannels = new DirectChannelRegistry(
-      (agentId) => this.enqueueCheckWork(agentId),
-      config.coalesceMs ?? 100,
-    );
   }
 
   async start(): Promise<void> {
@@ -54,7 +48,7 @@ export class Daemon {
       const alert = formatRecoveryAlert(report);
       if (alert) {
         try {
-          await this.config.comms.postMessage('incidents', 'orchestrator', alert);
+          this.config.chatAdapter.postMessage('orchestrator', 'incidents', alert);
         } catch { /* best effort */ }
       }
     }
@@ -63,14 +57,6 @@ export class Daemon {
     this.config.memory.indexAll(this.config.orgChart.agents, msg => console.log(`[daemon] ${msg}`))
       .then(() => console.log('[daemon] memory indexing complete'))
       .catch(err => console.error('[daemon] memory indexing error:', err));
-
-    // Register direct channels from BUREAU.md
-    for (const [id, agent] of this.config.orgChart.agents) {
-      const directDefs = parseBureauDirectChannels(agent.files.bureau);
-      if (directDefs.length > 0) {
-        this.directChannels.register(id, directDefs.map(d => d.channel));
-      }
-    }
 
     // Schedule periodic ticks per agent
     const tickMs = this.config.tickIntervalMs ?? 600_000;
@@ -92,8 +78,9 @@ export class Daemon {
     }
     this.tickTimers.clear();
 
-    // Clear pending direct channel triggers
-    this.directChannels.clearAll();
+    // Clear pending coalesce timers
+    for (const timer of this.coalesceTimers.values()) clearTimeout(timer);
+    this.coalesceTimers.clear();
 
     // Drain all lanes (wait for in-flight work)
     await this.lanes.drainAll();
@@ -105,10 +92,27 @@ export class Daemon {
 
   /**
    * Signal that a message arrived on a channel.
-   * If it's a direct channel for any agent, triggers coalesced CheckWork.
+   * Looks up channel members and triggers coalesced CheckWork for each.
    */
   signalChannel(channel: string): void {
-    this.directChannels.signal(channel);
+    let memberAliases: string[];
+    try {
+      memberAliases = this.config.chatAdapter.getChannelMembers(channel);
+    } catch {
+      return; // Channel doesn't exist yet, ignore
+    }
+
+    const coalesceMs = this.config.coalesceMs ?? 100;
+    for (const alias of memberAliases) {
+      if (!this.config.orgChart.agents.has(alias)) continue;
+
+      const existing = this.coalesceTimers.get(alias);
+      if (existing) clearTimeout(existing);
+      this.coalesceTimers.set(alias, setTimeout(() => {
+        this.coalesceTimers.delete(alias);
+        this.enqueueCheckWork(alias);
+      }, coalesceMs));
+    }
   }
 
   isRunning(): boolean {
@@ -133,16 +137,16 @@ export class Daemon {
       return { added, removed };
     }
 
+    // Refresh people cache if agents changed
+    if (added.length > 0 || removed.length > 0) {
+      this.config.chatAdapter.refreshPeopleCache();
+    }
+
     // Register new agents
     for (const id of added) {
       const agent = updatedOrg.agents.get(id)!;
       this.config.orgChart.agents.set(id, agent);
       this.config.state.register(id);
-
-      const directDefs = parseBureauDirectChannels(agent.files.bureau);
-      if (directDefs.length > 0) {
-        this.directChannels.register(id, directDefs.map(d => d.channel));
-      }
 
       const tickMs = this.config.tickIntervalMs ?? 600_000;
       const timer = setInterval(() => {
@@ -223,21 +227,13 @@ export class Daemon {
       audit: this.config.audit,
       orgAgents: this.config.orgChart.agents,
       getUnread: async (agentId) => {
-        const messages = await this.config.comms.getUnread(agentId);
-        return messages.map(m => ({
-          id: m.id,
-          channel: m.channel,
-          sender: m.sender,
-          content: m.content,
-          timestamp: m.timestamp,
-          thread: m.thread,
-          metadata: m.metadata as Record<string, unknown> | undefined,
-          mentions: m.mentions,
-        }));
+        return this.config.chatAdapter.getUnread(agentId);
       },
-      markRead: (agentId, ids) => this.config.comms.markRead(agentId, ids),
-      postMessage: async (agentId, channel, content, opts) => {
-        await this.config.comms.postMessage(channel, agentId, content, opts);
+      markRead: async (agentId, messageIds) => {
+        this.config.chatAdapter.markRead(agentId, messageIds);
+      },
+      postMessage: async (agentId, channel, content) => {
+        this.config.chatAdapter.postMessage(agentId, channel, content);
       },
       memorySearch: async (agentId, query, limit) => {
         return this.config.memory.search(agentId, query, limit);

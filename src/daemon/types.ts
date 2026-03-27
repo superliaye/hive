@@ -1,8 +1,7 @@
 import type { OrgChart, Person } from '../types.js';
 import type { AgentStateStore } from '../state/agent-state.js';
-import type { SqliteCommsProvider } from '../comms/sqlite-provider.js';
 import type { AuditStore } from '../audit/store.js';
-import type { ChannelManager } from '../comms/channel-manager.js';
+import type { ChatAdapter } from '../chat/adapter.js';
 import type { MemoryManager } from '../memory/manager.js';
 
 /**
@@ -21,10 +20,9 @@ export interface UnreadMessage {
 
 export interface DaemonConfig {
   orgChart: OrgChart;
-  comms: SqliteCommsProvider;
+  chatAdapter: ChatAdapter;
   audit: AuditStore;
   state: AgentStateStore;
-  channelManager: ChannelManager;
   memory: MemoryManager;
   dataDir: string;
   orgDir: string;
