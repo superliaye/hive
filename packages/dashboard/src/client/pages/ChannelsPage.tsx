@@ -31,7 +31,7 @@ export function ChannelsPage() {
               >
                 &larr; Back
               </button>
-              <h2 className="text-lg font-medium text-slate-200">{formatChannelName(selectedChannel, agentMap, selectedCh?.members)}</h2>
+              <h2 className="text-lg font-medium text-slate-200">{formatChannelName(selectedChannel, agentMap, selectedCh?.members, selectedCh?.displayName)}</h2>
             </div>
             <div className="flex-1 overflow-auto">
               <ChannelFeed channel={selectedChannel} />

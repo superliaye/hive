@@ -198,6 +198,23 @@ export class ChannelStore {
     throw new Error(`Target must start with @ (DM) or # (group). Got: "${target}"`);
   }
 
+  /** Format a channel ID for display. DMs show as @otherPerson, groups as #name. */
+  formatForDisplay(channelId: string, viewerId: number): string {
+    const dmMatch = channelId.match(/^dm:(\d+):(\d+)$/);
+    if (dmMatch) {
+      const a = parseInt(dmMatch[1], 10);
+      const b = parseInt(dmMatch[2], 10);
+      const otherId = a === viewerId ? b : b === viewerId ? a : b;
+      const row = this.db.raw().prepare('SELECT alias FROM people WHERE id = ?').get(otherId) as { alias: string } | undefined;
+      return row ? `@${row.alias}` : channelId;
+    }
+    // Non-DM channels are group channels
+    if (!channelId.startsWith('dm:')) {
+      return `#${channelId}`;
+    }
+    return channelId;
+  }
+
   private toChannel(row: any): ChatChannel {
     return {
       id: row.id,

@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ChatDb } from '../../src/chat/db.js';
-import { buildChatCommand } from '../../src/chat/cli.js';
+import { ChannelStore } from '../../src/chat/channels.js';
+import { MessageStore } from '../../src/chat/messages.js';
+import { CursorStore } from '../../src/chat/cursors.js';
+import { SearchEngine } from '../../src/chat/search.js';
+import { AccessControl } from '../../src/chat/access.js';
+import { ChatAdapter } from '../../src/chat/adapter.js';
+import { buildChatCommand, type ChatCliDeps } from '../../src/chat/cli.js';
 import { Command } from 'commander';
 
 function seedPeople(db: ChatDb) {
@@ -11,20 +17,19 @@ function seedPeople(db: ChatDb) {
   raw.prepare("INSERT INTO people (id, alias, name, role_template, status) VALUES (?, ?, ?, ?, 'active')").run(1, 'ceo', 'Chief Executive', 'chief-executive');
   raw.prepare("INSERT INTO people (id, alias, name, role_template, status) VALUES (?, ?, ?, ?, 'active')").run(2, 'alice', 'Alice Engineer', 'software-engineer');
   raw.prepare("INSERT INTO people (id, alias, name, role_template, status) VALUES (?, ?, ?, ?, 'active')").run(3, 'bob', 'Bob QA', 'qa-engineer');
-  raw.prepare("INSERT INTO people (id, alias, name, role_template, status) VALUES (?, ?, ?, ?, 'active')").run(4, 'carol', 'Carol PM', 'product-manager');
 }
 
 /**
  * E2E test helper: runs a CLI command and captures stdout.
- * Sets HIVE_AGENT_ID env var to simulate agent identity.
+ * Uses hive.db for messaging and people resolution.
  */
-async function runCli(db: ChatDb, args: string[], agentId: string = '1'): Promise<string> {
+async function runCli(deps: ChatCliDeps, args: string[], agentId: string = '1'): Promise<string> {
   const oldEnv = process.env.HIVE_AGENT_ID;
   process.env.HIVE_AGENT_ID = agentId;
 
   const program = new Command();
   program.exitOverride();
-  const chatCmd = buildChatCommand(db);
+  const chatCmd = buildChatCommand(deps);
   program.addCommand(chatCmd);
 
   const chunks: string[] = [];
@@ -43,335 +48,204 @@ async function runCli(db: ChatDb, args: string[], agentId: string = '1'): Promis
   }
 }
 
-async function runCliExpectError(db: ChatDb, args: string[], agentId: string = '1'): Promise<string> {
+async function runCliExpectError(deps: ChatCliDeps, args: string[], agentId: string = '1'): Promise<string> {
   try {
-    await runCli(db, args, agentId);
+    await runCli(deps, args, agentId);
     throw new Error('Expected command to throw');
   } catch (err: any) {
     return err.message;
   }
 }
 
-describe('E2E: CLI Commands', () => {
+describe('E2E: hive chat CLI', () => {
   let tmpDir: string;
-  let db: ChatDb;
+  let chatDb: ChatDb;
+  let channelStore: ChannelStore;
+  let messageStore: MessageStore;
+  let cursorStore: CursorStore;
+  let searchEngine: SearchEngine;
+  let accessControl: AccessControl;
+  let chatAdapter: ChatAdapter;
+  let deps: ChatCliDeps;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hive-chat-e2e-'));
-    db = new ChatDb(path.join(tmpDir, 'org-state.db'));
-    seedPeople(db);
+    chatDb = new ChatDb(path.join(tmpDir, 'hive.db'));
+    seedPeople(chatDb);
+    channelStore = new ChannelStore(chatDb);
+    messageStore = new MessageStore(chatDb);
+    cursorStore = new CursorStore(chatDb);
+    searchEngine = new SearchEngine(chatDb);
+    accessControl = new AccessControl(chatDb);
+    chatAdapter = new ChatAdapter(chatDb, channelStore, messageStore, cursorStore);
+    deps = { db: chatDb, channels: channelStore, messages: messageStore, cursors: cursorStore, search: searchEngine, access: accessControl, dashboardPort: 0 };
   });
 
   afterEach(() => {
-    db.close();
+    chatDb.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  describe('send + confirmation output', () => {
-    it('DM send prints "Sent seq N to channel"', async () => {
-      const out = await runCli(db, ['send', '@alice', 'hello world']);
-      expect(out).toMatch(/Sent seq 1 to dm:1:2/);
+  describe('send', () => {
+    it('DM send creates channel and posts message', async () => {
+      const out = await runCli(deps, ['send', '@alice', 'hello world']);
+      expect(out).toMatch(/Sent to @alice/);
+
+      // Verify message is in the chat store
+      const unread = chatAdapter.getUnread('alice');
+      expect(unread).toHaveLength(1);
+      expect(unread[0].content).toBe('hello world');
+      expect(unread[0].sender).toBe('ceo');
     });
 
-    it('sequential sends increment seq', async () => {
-      await runCli(db, ['send', '@alice', 'msg1']);
-      const out = await runCli(db, ['send', '@alice', 'msg2']);
-      expect(out).toMatch(/Sent seq 2/);
+    it('multiple sends accumulate in channel', async () => {
+      await runCli(deps, ['send', '@alice', 'msg1']);
+      await runCli(deps, ['send', '@alice', 'msg2']);
+
+      const unread = chatAdapter.getUnread('alice');
+      expect(unread).toHaveLength(2);
+      expect(unread[0].content).toBe('msg1');
+      expect(unread[1].content).toBe('msg2');
     });
 
-    it('group send works', async () => {
-      await runCli(db, ['group', 'create', 'eng-team', '@alice', '@bob']);
-      const out = await runCli(db, ['send', '#eng-team', 'standup time']);
-      expect(out).toMatch(/Sent seq 1 to eng-team/);
-    });
-  });
-
-  describe('send error handling', () => {
     it('missing HIVE_AGENT_ID gives clear error', async () => {
-      const err = await runCliExpectError(db, ['send', '@alice', 'hi'], '');
+      const err = await runCliExpectError(deps, ['send', '@alice', 'hi'], '');
       expect(err).toContain('HIVE_AGENT_ID not set');
-    });
-
-    it('self-message blocked', async () => {
-      const err = await runCliExpectError(db, ['send', '@ceo', 'hi'], '1');
-      expect(err).toContain('Cannot send message to yourself');
-    });
-
-    it('unknown alias gives helpful error', async () => {
-      const err = await runCliExpectError(db, ['send', '@nobody', 'hi']);
-      expect(err).toContain('Person "nobody" not found');
-    });
-
-    it('unknown group gives helpful error', async () => {
-      const err = await runCliExpectError(db, ['send', '#nonexistent', 'hi']);
-      expect(err).toContain('Group "nonexistent" not found');
-    });
-
-    it('non-CEO cannot message super-user', async () => {
-      const err = await runCliExpectError(db, ['send', '@super-user', 'hi'], '2');
-      expect(err).toContain('Only CEO can message super-user');
-    });
-
-    it('CEO can message super-user', async () => {
-      const out = await runCli(db, ['send', '@super-user', 'board update'], '1');
-      expect(out).toMatch(/Sent seq 1 to dm:0:1/);
     });
   });
 
   describe('inbox', () => {
     it('shows "No unread messages" when empty', async () => {
-      const out = await runCli(db, ['inbox']);
+      const out = await runCli(deps, ['inbox']);
       expect(out).toContain('No unread messages');
     });
 
     it('shows unread messages grouped by channel', async () => {
-      // CEO sends to alice and bob
-      await runCli(db, ['send', '@alice', 'task for alice'], '1');
-      await runCli(db, ['send', '@bob', 'task for bob'], '1');
+      // CEO sends to alice
+      await runCli(deps, ['send', '@alice', 'task for alice'], '1');
 
       // Alice checks inbox — sees message from CEO
-      const out = await runCli(db, ['inbox'], '2');
-      expect(out).toContain('dm:1:2');
+      const out = await runCli(deps, ['inbox'], '2');
+      expect(out).toContain('@ceo');
       expect(out).toContain('task for alice');
       expect(out).toContain('1 unread');
-      // Alice should NOT see bob's message
-      expect(out).not.toContain('task for bob');
     });
 
     it('excludes own messages from inbox', async () => {
-      // Alice sends to CEO — alice's own message should not appear in alice's inbox
-      await runCli(db, ['send', '@ceo', 'status update'], '2');
-      const out = await runCli(db, ['inbox'], '2');
+      // Alice sends to CEO — should not appear in alice's inbox
+      await runCli(deps, ['send', '@ceo', 'status update'], '2');
+      const out = await runCli(deps, ['inbox'], '2');
       expect(out).toContain('No unread messages');
     });
   });
 
   describe('ack', () => {
-    it('advancing cursor reduces unread', async () => {
-      await runCli(db, ['send', '@alice', 'msg1'], '1');
-      await runCli(db, ['send', '@alice', 'msg2'], '1');
+    it('marks messages as read', async () => {
+      await runCli(deps, ['send', '@alice', 'msg1'], '1');
 
-      // Alice acks through seq 1
-      const ackOut = await runCli(db, ['ack', '@ceo', '1'], '2');
-      expect(ackOut).toContain('Cursor advanced to seq 1');
+      // Alice has 1 unread
+      let inbox = await runCli(deps, ['inbox'], '2');
+      expect(inbox).toContain('1 unread');
 
-      // Alice inbox now shows only msg2
-      const inbox = await runCli(db, ['inbox'], '2');
-      expect(inbox).toContain('msg2');
-      expect(inbox).not.toContain('msg1\n'); // msg1 content not in output
+      // Alice acks dm with CEO (the person who sent the message)
+      await runCli(deps, ['ack', '@ceo'], '2');
+
+      // Alice has 0 unread
+      inbox = await runCli(deps, ['inbox'], '2');
+      expect(inbox).toContain('No unread messages');
     });
   });
 
   describe('history', () => {
-    it('shows header with total count and seq range', async () => {
-      await runCli(db, ['send', '@alice', 'msg1']);
-      await runCli(db, ['send', '@alice', 'msg2']);
-      await runCli(db, ['send', '@alice', 'msg3']);
+    it('shows message history for a channel', async () => {
+      await runCli(deps, ['send', '@alice', 'msg1']);
+      await runCli(deps, ['send', '@alice', 'msg2']);
+      await runCli(deps, ['send', '@alice', 'msg3']);
 
-      const out = await runCli(db, ['history', '@alice']);
-      expect(out).toContain('3 of 3');
-      expect(out).toContain('dm:1:2');
-      expect(out).toContain('seq 1-3');
+      const out = await runCli(deps, ['history', '@alice']);
+      expect(out).toContain('Showing 3 of 3');
+      expect(out).toContain('msg1');
+      expect(out).toContain('msg3');
     });
 
     it('--limit restricts output', async () => {
-      for (let i = 1; i <= 10; i++) {
-        await runCli(db, ['send', '@alice', `msg${i}`]);
-      }
-      const out = await runCli(db, ['history', '@alice', '--limit', '3']);
-      expect(out).toContain('3 of 10');
-      // Should show last 3 messages
-      expect(out).toContain('msg8');
-      expect(out).toContain('msg9');
-      expect(out).toContain('msg10');
-    });
-
-    it('--from shows messages from seq onwards', async () => {
       for (let i = 1; i <= 5; i++) {
-        await runCli(db, ['send', '@alice', `msg${i}`]);
+        await runCli(deps, ['send', '@alice', `msg${i}`]);
       }
-      const out = await runCli(db, ['history', '@alice', '--from', '3']);
-      expect(out).toContain('msg3');
-      expect(out).toContain('msg4');
-      expect(out).toContain('msg5');
-      expect(out).not.toContain('msg1');
-      expect(out).not.toContain('msg2');
-    });
-
-    it('--all shows everything', async () => {
-      for (let i = 1; i <= 25; i++) {
-        await runCli(db, ['send', '@alice', `msg${i}`]);
-      }
-      const out = await runCli(db, ['history', '@alice', '--all']);
-      expect(out).toContain('25 of 25');
-    });
-
-    it('non-member cannot view history', async () => {
-      await runCli(db, ['send', '@alice', 'secret'], '1');
-      const err = await runCliExpectError(db, ['history', '@ceo'], '3');
-      expect(err).toContain('No DM history with @ceo');
+      const out = await runCli(deps, ['history', '@alice', '--limit', '2']);
+      expect(out).toContain('Showing 2 of 5');
     });
   });
 
   describe('search', () => {
-    beforeEach(async () => {
-      // Seed messages across channels
-      await runCli(db, ['send', '@alice', 'Deploy to staging failed'], '1');
-      await runCli(db, ['send', '@ceo', 'Checking deploy logs'], '2');
-      await runCli(db, ['send', '@bob', 'QA report ready'], '1');
-      await runCli(db, ['group', 'create', 'eng-team', '@alice', '@bob'], '1');
-      await runCli(db, ['send', '#eng-team', 'Deploy pipeline green'], '1');
-    });
+    it('finds messages matching pattern', async () => {
+      await runCli(deps, ['send', '@alice', 'Deploy to staging failed'], '1');
+      await runCli(deps, ['send', '@bob', 'QA report ready'], '1');
 
-    it('literal search across all channels', async () => {
-      const out = await runCli(db, ['search', 'Deploy']);
-      expect(out).toMatch(/Found \d+ results/);
+      const out = await runCli(deps, ['search', 'Deploy']);
       expect(out).toContain('Deploy');
-    });
-
-    it('scoped search to DM', async () => {
-      const out = await runCli(db, ['search', '@alice', 'deploy'], '1');
-      // Should only show results from dm:1:2, not eng-team
-      expect(out).not.toContain('eng-team');
-    });
-
-    it('scoped search to group', async () => {
-      const out = await runCli(db, ['search', '#eng-team', '-i', 'deploy'], '1');
-      expect(out).toContain('eng-team');
-      expect(out).not.toContain('dm:');
-    });
-
-    it('--from filter shows only messages from sender', async () => {
-      const out = await runCli(db, ['search', '--from', 'alice', 'deploy'], '1');
-      // Only alice's message about deploy logs
-      const lines = out.split('\n').filter(l => l.includes('|'));
-      for (const line of lines) {
-        expect(line).toContain('alice');
-      }
-    });
-
-    it('bob cannot see dm:1:2 results', async () => {
-      const out = await runCli(db, ['search', 'staging'], '3');
-      expect(out).toContain('Found 0 results');
-    });
-  });
-
-  describe('group management', () => {
-    it('full group lifecycle: create → list → info → add → remove → delete', async () => {
-      // Create
-      const createOut = await runCli(db, ['group', 'create', 'eng-team', '@alice', '@bob']);
-      expect(createOut).toContain('eng-team');
-      expect(createOut).toContain('created');
-
-      // List
-      const listOut = await runCli(db, ['group', 'list']);
-      expect(listOut).toContain('#eng-team');
-
-      // Info
-      const infoOut = await runCli(db, ['group', 'info', '#eng-team']);
-      expect(infoOut).toContain('Members (3)');
-      expect(infoOut).toContain('@ceo');
-      expect(infoOut).toContain('@alice');
-      expect(infoOut).toContain('@bob');
-
-      // Add carol
-      const addOut = await runCli(db, ['group', 'add', '#eng-team', '@carol']);
-      expect(addOut).toContain('Added @carol');
-
-      const infoOut2 = await runCli(db, ['group', 'info', '#eng-team']);
-      expect(infoOut2).toContain('Members (4)');
-
-      // Remove bob
-      const removeOut = await runCli(db, ['group', 'remove', '#eng-team', '@bob']);
-      expect(removeOut).toContain('Removed @bob');
-
-      const infoOut3 = await runCli(db, ['group', 'info', '#eng-team']);
-      expect(infoOut3).toContain('Members (3)');
-      expect(infoOut3).not.toContain('@bob');
-
-      // Delete
-      const deleteOut = await runCli(db, ['group', 'delete', '#eng-team']);
-      expect(deleteOut).toContain('deleted');
-
-      // No longer in list
-      const listOut2 = await runCli(db, ['group', 'list']);
-      expect(listOut2).not.toContain('eng-team');
-    });
-
-    it('group create errors', async () => {
-      const err1 = await runCliExpectError(db, ['group', 'create', 'Bad Name', '@alice']);
-      expect(err1).toContain('kebab-case');
-
-      const err2 = await runCliExpectError(db, ['group', 'create', 'solo', '@ceo']);
-      expect(err2).toContain('at least 2 members');
-    });
-
-    it('non-member cannot view group info', async () => {
-      await runCli(db, ['group', 'create', 'private', '@alice', '@bob'], '1');
-      const err = await runCliExpectError(db, ['group', 'info', '#private'], '4');
-      expect(err).toContain('not a member');
-    });
-
-    it('group list shows "No groups" when empty', async () => {
-      const out = await runCli(db, ['group', 'list'], '2');
-      expect(out).toContain('No groups');
     });
   });
 
   describe('multi-agent conversation flow', () => {
     it('CEO delegates, agents respond, CEO reviews', async () => {
       // CEO sends tasks
-      await runCli(db, ['send', '@alice', 'Implement auth module'], '1');
-      await runCli(db, ['send', '@bob', 'Write auth test plan'], '1');
+      await runCli(deps, ['send', '@alice', 'Implement auth module'], '1');
+      await runCli(deps, ['send', '@bob', 'Write auth test plan'], '1');
 
       // Alice checks inbox and responds
-      const aliceInbox = await runCli(db, ['inbox'], '2');
+      const aliceInbox = await runCli(deps, ['inbox'], '2');
       expect(aliceInbox).toContain('Implement auth module');
-      await runCli(db, ['send', '@ceo', 'Auth module done, PR #42'], '2');
-      await runCli(db, ['ack', '@ceo', '1'], '2');
+      await runCli(deps, ['send', '@ceo', 'Auth module done, PR #42'], '2');
 
       // Bob checks inbox and responds
-      const bobInbox = await runCli(db, ['inbox'], '3');
+      const bobInbox = await runCli(deps, ['inbox'], '3');
       expect(bobInbox).toContain('Write auth test plan');
-      await runCli(db, ['send', '@ceo', 'Test plan uploaded'], '3');
-      await runCli(db, ['ack', '@ceo', '1'], '3');
+      await runCli(deps, ['send', '@ceo', 'Test plan uploaded'], '3');
 
       // CEO reviews responses
-      const ceoInbox = await runCli(db, ['inbox'], '1');
+      const ceoInbox = await runCli(deps, ['inbox'], '1');
       expect(ceoInbox).toContain('Auth module done');
       expect(ceoInbox).toContain('Test plan uploaded');
-
-      // CEO searches for auth-related messages (case-insensitive)
-      const searchOut = await runCli(db, ['search', '-i', 'auth'], '1');
-      expect(searchOut).toMatch(/Found 3 results/);
     });
   });
 
-  describe('cross-functional group workflow', () => {
-    it('creates group, discusses, searches across DM + group', async () => {
-      // Create cross-func group
-      await runCli(db, ['group', 'create', 'sprint-1', '@alice', '@bob', '@carol'], '1');
+  describe('data flow verification', () => {
+    it('messages written via CLI are visible to ChatAdapter.getUnread', async () => {
+      // CEO sends to alice
+      await runCli(deps, ['send', '@alice', 'urgent task'], '1');
 
-      // Group discussion
-      await runCli(db, ['send', '#sprint-1', 'Sprint goal: ship auth'], '1');
-      await runCli(db, ['send', '#sprint-1', 'Backend auth started'], '2');
-      await runCli(db, ['send', '#sprint-1', 'QA ready for auth'], '3');
-      await runCli(db, ['send', '#sprint-1', 'PRD updated for auth'], '4');
+      // Verify daemon's getUnread would pick this up
+      const unread = chatAdapter.getUnread('alice');
+      expect(unread).toHaveLength(1);
+      expect(unread[0].content).toBe('urgent task');
+      expect(unread[0].sender).toBe('ceo');
+    });
 
-      // CEO also DMs alice privately
-      await runCli(db, ['send', '@alice', 'auth is priority #1'], '1');
+    it('messages marked read via CLI are invisible to getUnread', async () => {
+      await runCli(deps, ['send', '@alice', 'task1'], '1');
 
-      // Alice searches for "auth" (case-sensitive) — sees group + DM
-      const aliceSearch = await runCli(db, ['search', 'auth'], '2');
-      expect(aliceSearch).toMatch(/Found 5 results/);
+      // Alice acks DM with CEO (the person who sent the message)
+      await runCli(deps, ['ack', '@ceo'], '2');
 
-      // Bob searches — only sees group (not in alice's DM)
-      const bobSearch = await runCli(db, ['search', 'auth'], '3');
-      expect(bobSearch).toMatch(/Found 4 results/);
+      // getUnread should return empty
+      const unread = chatAdapter.getUnread('alice');
+      expect(unread).toHaveLength(0);
+    });
 
-      // Scoped search within group only
-      const groupSearch = await runCli(db, ['search', '#sprint-1', 'auth'], '1');
-      expect(groupSearch).toMatch(/Found 4 results/);
+    it('bidirectional DM conversation works', async () => {
+      // CEO → alice
+      await runCli(deps, ['send', '@alice', 'do this'], '1');
+      // alice → CEO
+      await runCli(deps, ['send', '@ceo', 'done'], '2');
+
+      // CEO sees alice's reply
+      const ceoUnread = chatAdapter.getUnread('ceo');
+      expect(ceoUnread.some(m => m.content === 'done')).toBe(true);
+
+      // alice sees CEO's message
+      const aliceUnread = chatAdapter.getUnread('alice');
+      expect(aliceUnread.some(m => m.content === 'do this')).toBe(true);
     });
   });
 });

@@ -28,9 +28,10 @@ function getCallerIdentity(access: AccessControl): { id: number; alias: string }
   return { id: person.id, alias: person.alias };
 }
 
-function formatMsg(msg: ChatMessage): string {
+function formatMsg(msg: ChatMessage, displayChannel?: string): string {
   const ts = String(msg.timestamp).replace('T', ' ').slice(0, 19);
-  return `${ts} | ${msg.senderAlias} | ${msg.channelId} | ${msg.content}`;
+  const ch = displayChannel ?? msg.channelId;
+  return `${ts} | ${msg.senderAlias} | ${ch} | ${msg.content}`;
 }
 
 /**
@@ -81,7 +82,8 @@ export function buildChatCommand(deps: ChatCliDeps): Command {
       // Signal daemon for immediate pickup
       await signalDaemon(channelId, port);
 
-      process.stdout.write(`Sent to ${channelId} (seq: ${msg.seq})\n`);
+      const displayName = channels.formatForDisplay(channelId, caller.id);
+      process.stdout.write(`Sent to ${displayName} (seq: ${msg.seq})\n`);
     });
 
   // --- inbox ---
@@ -98,9 +100,10 @@ export function buildChatCommand(deps: ChatCliDeps): Command {
       }
 
       for (const group of unreadGroups) {
-        process.stdout.write(`\n--- ${group.channelId} (${group.messages.length} unread) ---\n`);
+        const displayName = channels.formatForDisplay(group.channelId, caller.id);
+        process.stdout.write(`\n--- ${displayName} (${group.messages.length} unread) ---\n`);
         for (const msg of group.messages) {
-          process.stdout.write(formatMsg(msg) + '\n');
+          process.stdout.write(formatMsg(msg, displayName) + '\n');
         }
       }
     });
@@ -113,21 +116,22 @@ export function buildChatCommand(deps: ChatCliDeps): Command {
       const caller = getCallerIdentity(access);
       const channelId = channels.resolveExistingTarget(target, caller.id);
 
+      const displayName = channels.formatForDisplay(channelId, caller.id);
       if (seqStr) {
         const seq = parseInt(seqStr, 10);
         cursors.ack(caller.id, channelId, seq);
-        process.stdout.write(`Marked up to seq ${seq} as read in ${channelId}\n`);
+        process.stdout.write(`Marked up to seq ${seq} as read in ${displayName}\n`);
       } else {
         // Find max seq from unread in this channel
         const unreadGroups = cursors.getUnread(caller.id);
         const group = unreadGroups.find(g => g.channelId === channelId);
         if (!group || group.messages.length === 0) {
-          process.stdout.write(`No unread messages in ${channelId}\n`);
+          process.stdout.write(`No unread messages in ${displayName}\n`);
           return;
         }
         const maxSeq = group.messages[group.messages.length - 1].seq;
         cursors.ack(caller.id, channelId, maxSeq);
-        process.stdout.write(`Marked ${group.messages.length} messages as read in ${channelId}\n`);
+        process.stdout.write(`Marked ${group.messages.length} messages as read in ${displayName}\n`);
       }
     });
 
@@ -142,14 +146,15 @@ export function buildChatCommand(deps: ChatCliDeps): Command {
       const limit = Number(opts.limit);
       const result = messages.history(channelId, { limit });
 
+      const displayName = channels.formatForDisplay(channelId, caller.id);
       if (result.messages.length === 0) {
-        process.stdout.write(`No messages in ${channelId}\n`);
+        process.stdout.write(`No messages in ${displayName}\n`);
         return;
       }
 
-      process.stdout.write(`Showing ${result.messages.length} of ${result.total} messages in ${channelId}\n\n`);
+      process.stdout.write(`Showing ${result.messages.length} of ${result.total} messages in ${displayName}\n\n`);
       for (const msg of result.messages) {
-        process.stdout.write(formatMsg(msg) + '\n');
+        process.stdout.write(formatMsg(msg, displayName) + '\n');
       }
     });
 
@@ -190,7 +195,8 @@ export function buildChatCommand(deps: ChatCliDeps): Command {
 
       process.stdout.write(`Found ${result.total} results (showing ${result.messages.length})\n\n`);
       for (const msg of result.messages) {
-        process.stdout.write(formatMsg(msg) + '\n');
+        const displayCh = channels.formatForDisplay(msg.channelId, caller.id);
+        process.stdout.write(formatMsg(msg, displayCh) + '\n');
       }
     });
 

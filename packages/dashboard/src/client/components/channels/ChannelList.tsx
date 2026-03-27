@@ -29,7 +29,7 @@ export function ChannelList({ selectedChannel, onSelectChannel }: ChannelListPro
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
             }`}
           >
-            <span>{formatChannelName(ch.name, agentMap, ch.members)}</span>
+            <span>{formatChannelName(ch.name, agentMap, ch.members, ch.displayName)}</span>
             <span className="text-xs text-slate-600 ml-2">{ch.messageCount} msgs</span>
           </button>
         ))}
