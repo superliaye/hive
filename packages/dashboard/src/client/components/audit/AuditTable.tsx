@@ -12,7 +12,7 @@ function formatTokenTooltip(inv: Invocation): string {
 export function AuditTable({ invocations }: { invocations: Invocation[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Only show invocations where agents actually did something (not comms logging)
+  // Only show checkWork invocations (excludes triage-only or internal logging)
   const actionable = invocations.filter(inv => inv.invocationType === 'checkWork');
 
   if (actionable.length === 0) {

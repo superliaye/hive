@@ -98,8 +98,10 @@ export class Daemon {
     let memberAliases: string[];
     try {
       memberAliases = this.config.chatAdapter.getChannelMembers(channel);
-    } catch {
-      return; // Channel doesn't exist yet, ignore
+    } catch (err) {
+      // Channel doesn't exist yet — expected for newly created channels before DB sync
+      console.debug(`[daemon] signalChannel: could not resolve members for ${channel}`);
+      return;
     }
 
     const coalesceMs = this.config.coalesceMs ?? 100;
