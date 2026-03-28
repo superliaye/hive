@@ -10,8 +10,9 @@ import type { AuditStore } from '../audit/store.js';
 import type { CheckWorkResult, UnreadMessage } from './types.js';
 import { parseFollowUps } from './followup-parser.js';
 import { validateFollowUp } from './followup-validator.js';
-import type { FollowUpStore } from './followup-store.js';
+import type { FollowUpStore, FollowUp } from './followup-store.js';
 import type { FollowUpScheduler } from './followup-scheduler.js';
+import { execFile } from 'node:child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -33,6 +34,46 @@ export interface CheckWorkContext {
   /** Optional: follow-up tracker for registering FOLLOWUP tags from agent responses. */
   followUpStore?: FollowUpStore;
   followUpScheduler?: FollowUpScheduler;
+
+  /** Optional: execute a shell check command for followup verification. */
+  execCheckCommand?: (command: string, timeoutMs?: number) => Promise<{ exitCode: number; output: string }>;
+}
+
+export async function runFollowUpCheckCommand(
+  command: string,
+  timeoutMs = 15_000,
+): Promise<{ exitCode: number; output: string }> {
+  return new Promise((resolve) => {
+    execFile('sh', ['-c', command], { timeout: timeoutMs }, (err, stdout, stderr) => {
+      const output = (stdout || '') + (stderr || '');
+      if (err && 'code' in err && typeof err.code === 'number') {
+        resolve({ exitCode: err.code, output: output.trim() });
+      } else if (err) {
+        resolve({ exitCode: 1, output: output.trim() || err.message });
+      } else {
+        resolve({ exitCode: 0, output: output.trim() });
+      }
+    });
+  });
+}
+
+function buildFollowUpInput(
+  followup: FollowUp,
+  isFinal: boolean,
+  checkExitCode?: number,
+  checkOutput?: string,
+): string {
+  const header = isFinal ? '# [FINAL] Follow-Up Check' : '# Follow-Up Check';
+  const attempt = `(attempt ${followup.attempt + 1} of ${followup.backoffSchedule.length})`;
+  let input = `\n\n---\n${header} ${attempt}\n`;
+  input += `**Description:** ${followup.description}\n`;
+  if (checkExitCode !== undefined) {
+    input += `**Check result** (exit ${checkExitCode}): ${checkOutput || 'no output'}\n`;
+  }
+  if (isFinal) {
+    input += `\n⚠️ This is the FINAL attempt. You must resolve, escalate, or cancel this follow-up.\n`;
+  }
+  return input;
 }
 
 function toScorerInput(msg: UnreadMessage): Omit<ScoredMessage, 'score'> {
@@ -168,7 +209,12 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
     // Read inbox
     const unread = await ctx.getUnread(agent.person.alias);
 
-    if (unread.length === 0) {
+    // Check for due followups early — we may need to continue even with empty inbox
+    const hasDueFollowups = ctx.followUpStore
+      ? ctx.followUpStore.getOpenByAgent(agent.person.alias).some(f => f.nextCheckAt <= new Date())
+      : false;
+
+    if (unread.length === 0 && !hasDueFollowups) {
       return {
         agentId: agent.person.alias,
         inboxCount: 0,
@@ -178,40 +224,50 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       };
     }
 
-    log(`inbox: ${unread.length} message(s)`);
-    for (const m of unread) log(`  [${m.conversation}] @${m.sender}: ${m.content.slice(0, 80)}`);
+    // Triage inbox messages (skip if inbox is empty but followups are due)
+    let ranked: ScoredMessage[] = [];
+    let triageResults: TriageResult[] = [];
+    let actNow: TriageResult[] = [];
+    let notes: TriageResult[] = [];
+    let ignore: TriageResult[] = [];
+    let queue: TriageResult[] = [];
 
-    // Score deterministically
-    const scorerInputs = unread.map(toScorerInput);
-    const ranked = rankMessages(scorerInputs, agent, DEFAULT_SCORING_WEIGHTS, ctx.orgAgents);
+    if (unread.length > 0) {
+      log(`inbox: ${unread.length} message(s)`);
+      for (const m of unread) log(`  [${m.conversation}] @${m.sender}: ${m.content.slice(0, 80)}`);
 
-    // Triage via LLM
-    log('triaging...');
-    const triageResults = await triageMessages(ranked, {
-      agentId: agent.person.alias,
-      agentDir: agent.dir,
-      priorities: agent.files.priorities,
-      bureau: agent.files.bureau,
-      timeoutMs: 300_000,
-    });
+      // Score deterministically
+      const scorerInputs = unread.map(toScorerInput);
+      ranked = rankMessages(scorerInputs, agent, DEFAULT_SCORING_WEIGHTS, ctx.orgAgents);
 
-    // Override: messages from super-user are ALWAYS ACT_NOW
-    for (const result of triageResults) {
-      const msg = ranked.find(m => m.messageId === result.messageId);
-      if (msg && msg.sender === 'super-user' && result.classification !== 'ACT_NOW') {
-        log(`override: ${result.classification} → ACT_NOW (super-user on #${msg.conversation})`);
-        result.classification = 'ACT_NOW';
-        result.reasoning = `Direct message from super-user on #${msg.conversation} — always ACT_NOW`;
+      // Triage via LLM
+      log('triaging...');
+      triageResults = await triageMessages(ranked, {
+        agentId: agent.person.alias,
+        agentDir: agent.dir,
+        priorities: agent.files.priorities,
+        bureau: agent.files.bureau,
+        timeoutMs: 300_000,
+      });
+
+      // Override: messages from super-user are ALWAYS ACT_NOW
+      for (const result of triageResults) {
+        const msg = ranked.find(m => m.messageId === result.messageId);
+        if (msg && msg.sender === 'super-user' && result.classification !== 'ACT_NOW') {
+          log(`override: ${result.classification} → ACT_NOW (super-user on #${msg.conversation})`);
+          result.classification = 'ACT_NOW';
+          result.reasoning = `Direct message from super-user on #${msg.conversation} — always ACT_NOW`;
+        }
       }
+
+      actNow = triageResults.filter(r => r.classification === 'ACT_NOW');
+      notes = triageResults.filter(r => r.classification === 'NOTE');
+      ignore = triageResults.filter(r => r.classification === 'IGNORE');
+      queue = triageResults.filter(r => r.classification === 'QUEUE');
+
+      log(`triage: ACT_NOW=${actNow.length} NOTE=${notes.length} QUEUE=${queue.length} IGNORE=${ignore.length}`);
+      for (const r of triageResults) log(`  ${r.messageId.slice(0, 8)}: ${r.classification} — ${r.reasoning}`);
     }
-
-    const actNow = triageResults.filter(r => r.classification === 'ACT_NOW');
-    const notes = triageResults.filter(r => r.classification === 'NOTE');
-    const ignore = triageResults.filter(r => r.classification === 'IGNORE');
-    const queue = triageResults.filter(r => r.classification === 'QUEUE');
-
-    log(`triage: ACT_NOW=${actNow.length} NOTE=${notes.length} QUEUE=${queue.length} IGNORE=${ignore.length}`);
-    for (const r of triageResults) log(`  ${r.messageId.slice(0, 8)}: ${r.classification} — ${r.reasoning}`);
 
     // Process NOTE + QUEUE — append to memory (but don't mark read yet — crash safety)
     const noteAndQueue = [...notes, ...queue];
@@ -227,18 +283,83 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       ctx.memoryReindex?.(agent.person.alias, agent.dir).catch(() => {});
     }
 
-    // Process ACT_NOW — invoke main agent
+    // === Phase: Process due followups ===
+    interface FollowUpAction {
+      followup: FollowUp;
+      action: 'spawn' | 'closed' | 'rescheduled';
+      checkExitCode?: number;
+      checkOutput?: string;
+      isFinal: boolean;
+    }
+    const followUpActions: FollowUpAction[] = [];
+
+    if (ctx.followUpStore) {
+      const dueFollowups = ctx.followUpStore.getOpenByAgent(agent.person.alias)
+        .filter(f => f.nextCheckAt <= new Date());
+
+      for (const followup of dueFollowups) {
+        const isFinal = followup.attempt + 1 >= followup.backoffSchedule.length;
+
+        if (followup.checkCommand) {
+          const exec = ctx.execCheckCommand ?? runFollowUpCheckCommand;
+          const { exitCode, output } = await exec(followup.checkCommand);
+          ctx.followUpStore.recordCheckResult(followup.id, exitCode, output);
+
+          // Log followup check to audit
+          ctx.audit.logInvocation({
+            agentId: agent.person.alias,
+            invocationType: 'followup-check',
+            model: 'shell',
+            durationMs: 0,
+            inputSummary: `Followup #${followup.id} (attempt ${followup.attempt + 1}/${followup.backoffSchedule.length}): ${followup.description}`,
+            outputSummary: `exit ${exitCode}: ${output.slice(0, 200)}`,
+            actionSummary: exitCode === 0 ? 'done' : exitCode === 2 ? 'skipped' : 'needs-agent',
+          });
+
+          if (exitCode === 0) {
+            ctx.followUpStore.close(followup.id, 'done');
+            followUpActions.push({ followup, action: 'closed', checkExitCode: exitCode, checkOutput: output, isFinal });
+            log(`[followup] #${followup.id} closed (done): ${followup.description}`);
+            continue;
+          }
+          if (exitCode === 2 && !isFinal) {
+            const advanced = ctx.followUpStore.advanceAttempt(followup.id);
+            if (advanced && ctx.followUpScheduler) ctx.followUpScheduler.scheduleCheck(advanced);
+            followUpActions.push({ followup, action: 'rescheduled', checkExitCode: exitCode, checkOutput: output, isFinal });
+            log(`[followup] #${followup.id} skipped, rescheduled: ${followup.description}`);
+            continue;
+          }
+          // exit 1, or exit 2 on final → needs agent spawn
+          followUpActions.push({ followup, action: 'spawn', checkExitCode: exitCode, checkOutput: output, isFinal });
+        } else {
+          // No check command → always spawn agent
+          followUpActions.push({ followup, action: 'spawn', isFinal });
+        }
+      }
+    }
+
+    const followupsNeedingSpawn = followUpActions.filter(a => a.action === 'spawn');
+
+    // Process ACT_NOW and/or followups — invoke main agent
     let agentInvoked = false;
-    if (actNow.length > 0) {
-      log(`invoking agent (${actNow.length} ACT_NOW messages)...`);
+    if (actNow.length > 0 || followupsNeedingSpawn.length > 0) {
+      const taskParts: string[] = [];
+      if (actNow.length > 0) taskParts.push(`${actNow.length} ACT_NOW message(s)`);
+      if (followupsNeedingSpawn.length > 0) taskParts.push(`${followupsNeedingSpawn.length} followup(s)`);
+      log(`invoking agent (${taskParts.join(', ')})...`);
       stateStore.updateStatus(agent.person.alias, 'working', {
         pid: process.pid,
-        currentTask: `Processing ${actNow.length} message(s)`,
+        currentTask: `Processing ${taskParts.join(', ')}`,
       });
 
       try {
         const systemPrompt = assemblePrompt(agent);
-        let workInput = buildWorkInput(ranked, triageResults);
+        let workInput = actNow.length > 0 ? buildWorkInput(ranked, triageResults) : '';
+
+        // Append followup context for followups needing agent spawn
+        for (const { followup, isFinal, checkExitCode, checkOutput } of followupsNeedingSpawn) {
+          workInput += buildFollowUpInput(followup, isFinal, checkExitCode, checkOutput);
+        }
 
         // Enrich with relevant memories via vector search
         if (ctx.memorySearch) {
@@ -318,16 +439,24 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         const actNowConversations = [...new Set(ranked.filter(m =>
           actNow.some(r => r.messageId === m.messageId)
         ).map(m => m.conversation))];
+        const invocationType = actNow.length > 0 ? 'checkWork' : 'followup';
+        const inputParts: string[] = [];
+        if (actNow.length > 0) {
+          inputParts.push(`${actNow.length} ACT_NOW message(s) from ${actNowConversations.map(c => '#' + c).join(', ')}`);
+        }
+        if (followupsNeedingSpawn.length > 0) {
+          inputParts.push(`${followupsNeedingSpawn.length} followup(s)`);
+        }
         const invocationId = ctx.audit.logInvocation({
           agentId: agent.person.alias,
-          invocationType: 'checkWork',
+          invocationType,
           model: agent.identity.model,
           tokensIn: workResult.tokensIn,
           tokensOut: workResult.tokensOut,
           cacheReadTokens: workResult.cacheReadTokens,
           cacheCreationTokens: workResult.cacheCreationTokens,
           durationMs: workResult.durationMs,
-          inputSummary: `${actNow.length} ACT_NOW message(s) from ${actNowConversations.map(c => '#' + c).join(', ')}`,
+          inputSummary: inputParts.join('; '),
           outputSummary: responseText.slice(0, 200),
           actionSummary,
           channel: actNowConversations[0],
@@ -342,6 +471,18 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           log(`WARNING: claude failed with exit code ${workResult.exitCode}`);
         } else if (!responseText) {
           log(`WARNING: claude returned empty output`);
+        }
+
+        // Process followup results after agent completes
+        for (const { followup, isFinal } of followupsNeedingSpawn) {
+          if (isFinal) {
+            ctx.followUpStore?.close(followup.id, 'expired');
+            log(`[followup] #${followup.id} expired (final attempt): ${followup.description}`);
+          } else {
+            const advanced = ctx.followUpStore?.advanceAttempt(followup.id);
+            if (advanced && ctx.followUpScheduler) ctx.followUpScheduler.scheduleCheck(advanced);
+            log(`[followup] #${followup.id} rescheduled: ${followup.description}`);
+          }
         }
 
         agentInvoked = true;
