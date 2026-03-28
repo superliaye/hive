@@ -112,27 +112,33 @@ graph TB
     direction TB
 
     CHAT[(Chat DB<br/>DMs + Groups)] -->|"signal / tick"| CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
+
     CW --> S1["Score<br/>(deterministic)"]
     S1 --> S2["Triage<br/>(haiku LLM)"]
+    S2 -->|"log"| TAUDIT["Audit: triage row"]
     S2 -->|"NOTE / QUEUE"| MEM["Append to<br/>Memory File ×N"]
     S2 -->|"IGNORE"| MARK["Mark Read"]
     MEM --> MARK
-    S2 -->|"ACT_NOW"| SPAWN["Spawn Claude CLI"]
+
+    CW -->|"check due<br/>followups"| FCHECK{"Run check<br/>commands"}
+    FCHECK -->|"exit 0"| FCLOSE["Close followup"]
+    FCHECK -->|"exit 2"| FRESCHED["Reschedule"]
+    FCHECK -->|"log each"| FAUDIT["Audit: followup-check"]
+
+    S2 -->|"ACT_NOW"| DECIDE{{"Spawn?"}}
+    FCHECK -->|"exit 1"| DECIDE
+    DECIDE -->|"yes"| SPAWN["Spawn Claude CLI<br/>(single entry point)"]
 
     SPAWN -->|"stdout JSON"| PARSE["Parse response"]
-    PARSE -->|"ACTION tag"| AUDIT["Audit Store"]
-    PARSE -->|"FOLLOWUP tags"| REG["Register followup"]
+    PARSE -->|"ACTION tag"| AUDIT["Audit: invocation row"]
+    PARSE -->|"FOLLOWUP tags"| REG["Register followup<br/>+ schedule timer"]
     PARSE --> ADV["Advance cursors<br/>→ idle"]
 
-    REG --> FUP["Followup Scheduler"]
-    FUP -->|"timer fires"| FCHECK{"Run check<br/>command"}
-    FCHECK -->|"exit 0"| FCLOSE["Close followup"]
-    FCHECK -->|"exit 1 or<br/>no command"| FSPAWN["Spawn Claude CLI<br/>(followup mode)"]
-    FSPAWN --> FLOG["Log to audit<br/>→ reschedule / expire"]
+    REG --> FTIMER["Followup Timer"]
+    FTIMER -->|"due"| CW
   end
 
   SPAWN -.->|"spawnClaude()"| AGENT["Agent Process ×N<br/>(stateless, isolated)"]
-  FSPAWN -.->|"spawnClaude()"| AGENT
   AGENT -.->|"hive chat send<br/>(side effect)"| CHAT
   CW -.->|"events"| DASH
 
@@ -469,17 +475,24 @@ graph TB
 <div class="section">
 
 <div class="mermaid">
-stateDiagram-v2
-  [*] --> registered
-  registered --> check_command: next_check_at reached
-  check_command --> done: exit 0
-  check_command --> spawn_agent: exit 1 / no command
-  check_command --> next_attempt: exit 2 (skip)
-  spawn_agent --> next_attempt: not final
-  spawn_agent --> expired: final attempt
-  next_attempt --> check_command: backoff interval
-  done --> [*]
-  expired --> [*]
+graph TB
+  AGENT["Agent response"] -->|"FOLLOWUP tags"| PARSE["Parse + validate"]
+  PARSE --> STORE["Store in followups table"]
+  STORE --> TIMER["Schedule timer<br/>(backoff[0])"]
+  TIMER -->|"timer fires"| SIGNAL["Signal daemon:<br/>enqueueCheckWork(agent)"]
+  SIGNAL --> CW["checkWork()"]
+  CW --> DUE["Get due followups"]
+  DUE --> CHECK{"Has check<br/>command?"}
+  CHECK -->|"yes"| RUN["Run check command<br/>(15s timeout)"]
+  CHECK -->|"no"| SPAWN["Include in agent spawn"]
+  RUN -->|"exit 0"| CLOSE["Close as done"]
+  RUN -->|"exit 1"| SPAWN
+  RUN -->|"exit 2, not final"| RESCHED["Advance + reschedule"]
+  RUN -->|"exit 2, final"| SPAWN
+  SPAWN --> RESULT["Agent completes"]
+  RESULT -->|"not final"| RESCHED
+  RESULT -->|"final"| EXPIRE["Close as expired"]
+  RESCHED --> TIMER
 </div>
 
 <h3>Tag Format</h3>
