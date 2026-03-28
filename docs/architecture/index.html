@@ -124,11 +124,14 @@ graph TB
   DASH -->|"POST /api/chat"| CHAT
   DAEMON -->|"events"| DASH
   S3 --> AGENTS["Agent Process ×N<br/>(stateless, isolated)"]
-  S3 --> AUDIT["Audit Store"]
   AGENTS -->|"hive chat send"| CHAT
   AGENTS -->|"FOLLOWUP tags"| FUP["Followup Scheduler"]
-  FUP -->|"backoff checks"| S3
-  FUP --> AUDIT
+  AGENTS -->|"result"| CW["checkWork<br/>orchestrator"]
+  CW -->|"log"| AUDIT["Audit Store"]
+  FUP -->|"next_check_at"| FCHECK{"Check<br/>command"}
+  FCHECK -->|"exit 0"| FDONE["Close followup"]
+  FCHECK -->|"exit 1"| S3
+  FUP -->|"log"| AUDIT
 
   style ui fill:transparent,stroke:#30363d
   style core fill:transparent,stroke:#30363d
@@ -790,16 +793,19 @@ function addStackedCards() {
     const rect = node.querySelector('rect.basic');
     if (!rect) return;
     const parent = rect.parentNode;
+    const x = parseFloat(rect.getAttribute('x') || 0);
+    const y = parseFloat(rect.getAttribute('y') || 0);
     // Create 2 offset clones behind the original for a "stack" look
+    // i=1 is the nearest shadow, i=2 is furthest back
     for (let i = 2; i >= 1; i--) {
       const clone = rect.cloneNode(true);
-      clone.setAttribute('x', parseFloat(rect.getAttribute('x') || 0) + i * 6);
-      clone.setAttribute('y', parseFloat(rect.getAttribute('y') || 0) + i * 6);
-      clone.style.opacity = 0.4 + i * 0.15;
+      clone.setAttribute('x', x + i * 5);
+      clone.setAttribute('y', y + i * 5);
+      clone.style.opacity = i === 2 ? '0.35' : '0.6';
       clone.style.fill = '#161b22';
       clone.style.stroke = '#58a6ff';
       clone.style.strokeWidth = '1px';
-      parent.insertBefore(clone, parent.firstChild);
+      parent.insertBefore(clone, rect);
     }
   });
 }
