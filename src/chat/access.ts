@@ -46,8 +46,14 @@ export class AccessControl {
     }
   }
 
-  /** Get all conversation IDs this person is a member of. */
+  /** Get all conversation IDs this person is a member of. Super-user (id 0) sees all. */
   getAccessibleConversations(personId: number): string[] {
+    if (personId === 0) {
+      const rows = this.db.raw()
+        .prepare('SELECT id AS conversation_id FROM conversations WHERE deleted = 0')
+        .all() as { conversation_id: string }[];
+      return rows.map(r => r.conversation_id);
+    }
     const rows = this.db.raw()
       .prepare('SELECT conversation_id FROM conversation_members WHERE person_id = ?')
       .all(personId) as { conversation_id: string }[];
