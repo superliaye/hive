@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hive Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --yellow: #d29922; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font: 14px/1.6 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: var(--bg); color: var(--text);
+    max-width: 1200px; margin: 0 auto; padding: 20px;
+  }
+  h1 { font-size: 24px; margin: 0 0 8px; color: var(--accent); }
+  h2 {
+    font-size: 16px; margin: 40px 0 12px; padding: 8px 12px;
+    background: var(--surface); border-left: 3px solid var(--accent);
+    cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 10;
+  }
+  h2::before { content: '[-] '; color: var(--muted); font-size: 12px; }
+  h2.collapsed::before { content: '[+] '; }
+  h2:hover { border-left-color: var(--green); }
+  h3 { font-size: 14px; margin: 20px 0 8px; color: var(--purple); }
+  h4 { font-size: 13px; margin: 16px 0 6px; color: var(--yellow); }
+  p, li { color: var(--text); margin: 4px 0; }
+  ul, ol { padding-left: 20px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    font-family: inherit; background: var(--surface);
+    padding: 1px 5px; border-radius: 3px; font-size: 13px;
+  }
+  pre {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 12px; border-radius: 6px; overflow-x: auto;
+    margin: 8px 0; font-size: 12px; line-height: 1.5;
+  }
+  .section { padding: 0 12px 20px; }
+  .section.hidden { display: none; }
+  table {
+    width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px;
+  }
+  th, td {
+    text-align: left; padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--muted); font-weight: 600; background: var(--surface); }
+  td:first-child { white-space: nowrap; color: var(--green); }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+  .tag-act { background: #f8514922; color: var(--red); border: 1px solid #f8514944; }
+  .tag-queue { background: #d2992222; color: var(--yellow); border: 1px solid #d2992244; }
+  .tag-note { background: #58a6ff22; color: var(--accent); border: 1px solid #58a6ff44; }
+  .tag-ignore { background: #8b949e22; color: var(--muted); border: 1px solid #8b949e44; }
+  .mermaid { margin: 12px 0; text-align: center; }
+  .toc { columns: 2; column-gap: 24px; margin: 12px 0; }
+  .toc a { display: block; padding: 3px 0; color: var(--muted); font-size: 13px; }
+  .toc a:hover { color: var(--accent); }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 2px 12px; margin: 8px 0; }
+  .kv dt { color: var(--muted); }
+  .kv dd { color: var(--text); }
+  .invariant {
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 8px 12px; margin: 4px 0; border-radius: 4px;
+  }
+  .invariant strong { color: var(--green); }
+  .updated { color: var(--muted); font-size: 12px; }
+  #nav {
+    position: fixed; right: 20px; top: 20px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+    font-size: 11px; max-height: 90vh; overflow-y: auto; z-index: 100; width: 180px;
+  }
+  #nav a { display: block; padding: 2px 6px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #nav a:hover { color: var(--accent); }
+  #nav a.active { color: var(--accent); border-left: 2px solid var(--accent); padding-left: 4px; }
+  @media (max-width: 1400px) { #nav { display: none; } }
+  .flow-step {
+    display: flex; align-items: baseline; gap: 8px; margin: 3px 0;
+  }
+  .flow-step .num {
+    color: var(--muted); font-size: 11px; min-width: 18px; text-align: right;
+  }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } body { padding: 12px; } }
+</style>
+</head>
+<body>
+
+<nav id="nav"></nav>
+
+<h1>Hive Architecture</h1>
+<p class="updated">Last updated: 2026-03-28</p>
+<p>Autonomous agent organization framework. Agents communicate, delegate, and ship code with minimal human intervention.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="overview">System Overview</h2>
+<div class="section">
+
+<div class="mermaid">
+graph TB
+  U["Super-User<br/>(dashboard / CLI)"]
+  U -->|"hive chat send"| CHAT[(Chat DB)]
+  AGENTS["Agent Subprocesses"] -->|"hive chat send"| CHAT
+  CHAT -->|"signal / tick"| DAEMON["Daemon"]
+  DAEMON --> LANE["Lane Manager<br/>(1 lane per agent)"]
+  LANE --> S1["Stage 1<br/>Deterministic Score"]
+  S1 --> S2["Stage 2<br/>LLM Triage (haiku)"]
+  S2 -->|"ACT_NOW"| S3["Stage 3<br/>Spawn Claude CLI"]
+  S2 -->|"NOTE / QUEUE"| MEM["Memory File"]
+  S2 -->|"IGNORE"| MARK["Mark Read"]
+  S3 --> AGENTS
+  S3 -->|"FOLLOWUP tags"| FUP["Followup Scheduler"]
+  S3 --> AUDIT["Audit Store"]
+  FUP -->|"backoff checks"| S3
+  DASH["Dashboard"] -->|"SSE"| U
+  DAEMON -->|"events"| DASH
+</div>
+
+<h3>Module Map</h3>
+<div class="cols">
+<pre>src/
+├── cli.ts              # CLI entry point
+├── context.ts          # DI container
+├── types.ts            # Core types
+├── daemon/             # Ticks, lanes, checkwork
+├── chat/               # Messages, cursors
+├── agents/             # Spawner, prompts
+├── gateway/            # Scoring + triage
+├── org/                # Org parser
+├── state/              # Agent status
+├── audit/              # Invocation logs
+├── memory/             # Vector search
+├── orchestrator/       # PID, recovery
+└── events/             # EventBus</pre>
+<pre>packages/dashboard/
+├── src/server/
+│   ├── index.ts        # Express + daemon
+│   ├── router.ts       # API routes
+│   ├── sse.ts          # SSE manager
+│   └── routes/         # Endpoints
+└── src/client/
+    ├── App.tsx          # React SPA
+    ├── hooks/useSSE.tsx # Real-time
+    └── pages/           # UI pages</pre>
+</div>
+
+<h3>Key Invariants</h3>
+<div class="invariant"><strong>1.</strong> One lane per agent, concurrency=1 &mdash; no overlapping invocations</div>
+<div class="invariant"><strong>2.</strong> Cursor advances only after processing &mdash; crash-safe message handling</div>
+<div class="invariant"><strong>3.</strong> Zero LLM cost when inbox empty &mdash; ticks are free if nothing to do</div>
+<div class="invariant"><strong>4.</strong> Super-user messages always ACT_NOW &mdash; bypass triage classification</div>
+<div class="invariant"><strong>5.</strong> Agents never call <code>ack</code> &mdash; daemon owns cursor management (<code>HIVE_DAEMON_SPAWN=1</code>)</div>
+<div class="invariant"><strong>6.</strong> Staggered ticks &mdash; prevents thundering herd of concurrent API calls</div>
+<div class="invariant"><strong>7.</strong> Memory written before read &mdash; NOTE/QUEUE saved to disk before marking read</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="org">Org Model</h2>
+<div class="section">
+
+<div class="mermaid">
+graph TD
+  SU["Super-User (id=0)"] -.->|"DM"| CEO
+  CEO["CEO<br/>roleTemplate: ceo"] -->|"reportsTo"| M1["Manager A<br/>roleTemplate: manager"]
+  CEO -->|"reportsTo"| M2["Manager B<br/>roleTemplate: manager"]
+  M1 -->|"reportsTo"| D1["Dev 1<br/>roleTemplate: swe"]
+  M1 -->|"reportsTo"| D2["Dev 2<br/>roleTemplate: swe"]
+  M2 -->|"reportsTo"| Q1["QA 1<br/>roleTemplate: qa"]
+</div>
+
+<h3>People Table</h3>
+<pre>CREATE TABLE people (
+  id        INTEGER PRIMARY KEY,
+  alias     TEXT UNIQUE NOT NULL,    -- e.g. "ceo", "eng-mgr"
+  name      TEXT NOT NULL,
+  roleTemplate TEXT,                 -- "ceo" | "manager" | "swe" | "qa"
+  status    TEXT DEFAULT 'active',
+  folder    TEXT NOT NULL,           -- relative path under org/
+  reportsTo INTEGER REFERENCES people(id),
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+);</pre>
+<p>Person ID 0 = super-user (human). Hierarchy defined by <code>reportsTo</code>, not directory nesting.</p>
+
+<h3>Agent Folder Structure</h3>
+<pre>org/{id}-{alias}/
+├── IDENTITY.md       # YAML frontmatter (id, alias, role, model, skills, vibe)
+├── SOUL.md           # Personality, values, behavioral guidelines
+├── BUREAU.md         # Org position context (auto-generated)
+├── PRIORITIES.md     # Current focus areas
+├── ROUTINE.md        # Scheduled behaviors
+├── MEMORY.md         # Curated long-term notes (agent-editable)
+├── memory/           # Daily logs (auto-appended by daemon)
+│   └── YYYY-MM-DD.md
+├── role-skills/      # Skills from role template
+└── .claude/skills/   # Skills loaded by Claude CLI</pre>
+
+<h3>Role Templates</h3>
+<p>Copied during provisioning from <code>role-templates/{template}/</code>:</p>
+<table>
+  <tr><th>Template</th><th>Files</th><th>Skills</th></tr>
+  <tr><td>ceo</td><td>SOUL.md</td><td>delegation</td></tr>
+  <tr><td>manager</td><td>SOUL.md</td><td>delegation</td></tr>
+  <tr><td>swe</td><td>SOUL.md</td><td>git-workflow</td></tr>
+  <tr><td>qa</td><td>SOUL.md</td><td>git-workflow</td></tr>
+</table>
+
+<h3>Org Boundary Rules</h3>
+<ul>
+  <li><strong>CEO</strong>: Delegates to direct reports only. Never skip-level assigns.</li>
+  <li><strong>Managers</strong>: Delegate to direct reports. Never do IC work themselves.</li>
+  <li><strong>ICs</strong>: Execute work, report back to manager, request peer reviews.</li>
+</ul>
+
+<h3>Provisioning</h3>
+<pre>hive agent create --alias dev1 --name "Dev 1" --template swe --reports-to eng-mgr</pre>
+<ol>
+  <li>Validate alias uniqueness, template exists, manager exists</li>
+  <li>Assign next person ID from DB</li>
+  <li>Create <code>org/{id}-{alias}/</code> folder, copy template files</li>
+  <li>Inject IDENTITY.md frontmatter</li>
+  <li>Insert into people table</li>
+  <li>Signal daemon for hot-reload</li>
+</ol>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="agents">Agents</h2>
+<div class="section">
+
+<h3>What is an Agent</h3>
+<p>A Claude CLI process spawned by the daemon. Stateless &mdash; each invocation gets a fresh session with an assembled system prompt.</p>
+
+<h3>Spawner</h3>
+<pre>spawnClaude(args, { cwd: agentDir, input: workContext, timeoutMs, env })</pre>
+
+<h4>CLI args</h4>
+<pre>-p --model &lt;model&gt; --system-prompt &lt;prompt&gt; --permission-mode bypassPermissions --output-format json</pre>
+
+<h4>Environment</h4>
+<table>
+  <tr><th>Var</th><th>Value</th><th>Purpose</th></tr>
+  <tr><td>GIT_AUTHOR_NAME</td><td>"Name (hive/alias)"</td><td>Agents sign commits</td></tr>
+  <tr><td>GIT_AUTHOR_EMAIL</td><td>"alias@hive.local"</td><td>Git identity</td></tr>
+  <tr><td>HIVE_DAEMON_SPAWN</td><td>"1"</td><td>Blocks <code>ack</code> in CLI (prevents cursor corruption)</td></tr>
+  <tr><td>CLAUDECODE</td><td><em>deleted</em></td><td>Allows spawning from within Claude Code</td></tr>
+</table>
+
+<h3>Prompt Assembly Order</h3>
+<div class="mermaid">
+graph LR
+  A["IDENTITY.md"] --> B["SOUL.md"] --> C["BUREAU.md"] --> D["PROTOCOLS.md"]
+  D --> E["Skills/*.md"] --> F["PRIORITIES.md"] --> G["ROUTINE.md"]
+  G --> H["MEMORY.md + logs"] --> I["ACTION_TAG_INSTRUCTION"]
+</div>
+<p>Empty sections are filtered out. MEMORY includes last 3 days of daily logs.</p>
+
+<h3>Required Response Tags</h3>
+<h4>ACTION (mandatory)</h4>
+<pre>ACTION: &lt;3-6 word summary of what you did&gt;</pre>
+<p>Used for audit trail. If missing, haiku generates summary (fire-and-forget).</p>
+
+<h4>FOLLOWUP (when commitments exist)</h4>
+<pre>FOLLOWUP: &lt;description&gt;
+| check: &lt;shell command &mdash; exit 0=done, 1=not done, 2=skip&gt;
+| backoff: &lt;intervals, e.g. 10m, 30m, 1h&gt;</pre>
+
+<h3>Skills</h3>
+<p>Markdown files at <code>.claude/skills/{name}/SKILL.md</code>. Listed in IDENTITY.md frontmatter.</p>
+<table>
+  <tr><th>Skill</th><th>For</th><th>Purpose</th></tr>
+  <tr><td>hive-comms</td><td>All agents</td><td>How to use <code>hive chat</code> for messaging</td></tr>
+  <tr><td>git-workflow</td><td>ICs</td><td>PR creation, review, branch management</td></tr>
+  <tr><td>delegation</td><td>CEO + Managers</td><td>Structured handoff, FOLLOWUP tracking, no IC work</td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="chat">Chat System</h2>
+<div class="section">
+
+<div class="mermaid">
+graph LR
+  SEND["Agent / User"] -->|"postMessage()"| MSG["Messages Table<br/>(per-conv seq)"]
+  MSG --> CURSOR["Read Cursors<br/>(per-person per-conv)"]
+  DAEMON["Daemon"] -->|"getUnread()"| MSG
+  DAEMON -->|"markRead()"| CURSOR
+</div>
+
+<h3>Conversations</h3>
+<table>
+  <tr><th>Type</th><th>ID Format</th><th>Creation</th></tr>
+  <tr><td>DM</td><td><code>dm:{min(a,b)}:{max(a,b)}</code></td><td>Auto on first message</td></tr>
+  <tr><td>Group</td><td><code>{kebab-name}</code></td><td>Explicit via CLI</td></tr>
+</table>
+
+<h3>Messages</h3>
+<pre>CREATE TABLE messages (
+  seq            INTEGER,              -- per-conversation sequential
+  conversationId TEXT,
+  senderId       INTEGER,
+  content        TEXT,
+  timestamp      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (conversationId, seq)
+);</pre>
+<p>Sent atomically: <code>BEGIN</code> &rarr; <code>SELECT MAX(seq)</code> &rarr; <code>INSERT (max+1)</code> &rarr; <code>COMMIT</code></p>
+
+<h3>Read Cursors</h3>
+<pre>CREATE TABLE cursors (
+  personId       INTEGER,
+  conversationId TEXT,
+  lastSeq        INTEGER DEFAULT 0,     -- never goes backward
+  updatedAt      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (personId, conversationId)
+);</pre>
+
+<p><strong>Unread</strong>: <code>messages WHERE seq > cursor AND senderId != personId</code></p>
+
+<h4>Cursor Corruption Prevention</h4>
+<ul>
+  <li>Agent subprocesses have <code>HIVE_DAEMON_SPAWN=1</code> &rarr; <code>hive chat ack</code> is a no-op</li>
+  <li>Only the daemon advances cursors after processing through checkWork</li>
+  <li>Audit logging on every cursor move with warning if cursor jumps ahead of max seq</li>
+</ul>
+
+<h3>Chat Adapter</h3>
+<p>Bridge between daemon (aliases) and chat store (person IDs):</p>
+<pre>postMessage(senderAlias, conversationId, content) &rarr; syntheticId
+getUnread(alias) &rarr; UnreadMessage[]
+markRead(alias, messageIds) &rarr; void</pre>
+
+<h3>Access Control</h3>
+<ul>
+  <li><strong>DM</strong>: Both participants can read/write. Super-user can DM anyone.</li>
+  <li><strong>Group</strong>: Only members can read/write.</li>
+</ul>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="daemon">Daemon</h2>
+<div class="section">
+
+<h3>Startup Sequence</h3>
+<div class="mermaid">
+graph TB
+  START["daemon.start()"] --> PID["Write PID file"]
+  PID --> REG["Register agents in state store"]
+  REG --> CRASH["Crash recovery<br/>(recover stale 'working' agents)"]
+  CRASH --> FUP["Init FollowUpStore + Scheduler"]
+  FUP --> MEM["Index memories (background)"]
+  MEM --> TICK["Schedule staggered ticks"]
+</div>
+
+<h3>Tick Staggering</h3>
+<pre>tickMs = 600_000  (10 min)
+staggerMs = tickMs / agentCount
+
+Agent 0: fires at t=0,          repeats every 10min
+Agent 1: fires at t=stagger,    repeats every 10min
+Agent 2: fires at t=2*stagger,  repeats every 10min
+...</pre>
+<p>Prevents thundering herd of concurrent Claude CLI spawns hitting API rate limits.</p>
+
+<h3>Lanes</h3>
+<p>Per-agent FIFO queue. Concurrency = 1.</p>
+<ul>
+  <li><strong>Serial per-agent</strong>: No overlapping invocations for same agent</li>
+  <li><strong>Parallel cross-agent</strong>: Different agents run independently</li>
+  <li><code>drain()</code>: Wait for all pending tasks (graceful shutdown)</li>
+</ul>
+
+<h3>Signal Path (fast response)</h3>
+<pre>message posted &rarr; POST /api/signal &rarr; daemon.signalConversation(id)
+  &rarr; resolve members &rarr; for each agent member:
+    &rarr; debounce 100ms &rarr; enqueueCheckWork(agentId)</pre>
+
+<h3>CheckWork Cycle</h3>
+<div class="mermaid">
+graph TB
+  CW["checkWork(agent)"] --> GUARD{"status == working?"}
+  GUARD -->|"yes"| SKIP["Skip"]
+  GUARD -->|"no"| READ["Read unread messages"]
+  READ --> EMPTY{"inbox empty?"}
+  EMPTY -->|"yes"| DONE["Return (zero cost)"]
+  EMPTY -->|"no"| SCORE["Stage 1: Score"]
+  SCORE --> TRIAGE["Stage 2: Triage (haiku, 5min timeout)"]
+  TRIAGE --> CLASSIFY{"classification?"}
+  CLASSIFY -->|"NOTE/QUEUE"| MEMORY["Append to memory file"]
+  MEMORY --> MARKREAD["Mark read"]
+  CLASSIFY -->|"IGNORE"| MARKREAD
+  CLASSIFY -->|"ACT_NOW"| WORKING["Set status=working"]
+  WORKING --> PROMPT["Assemble prompt + memory search"]
+  PROMPT --> SPAWN["Spawn Claude CLI"]
+  SPAWN --> PARSE["Parse FOLLOWUP tags"]
+  PARSE --> AUDITLOG["Log to audit"]
+  AUDITLOG --> IDLE["Set status=idle"]
+  IDLE --> RECHECK{"recheck?"}
+  RECHECK -->|"yes"| CW
+</div>
+
+<h3>Exponential Decay</h3>
+<p>When inbox has messages but none ACT_NOW: schedule recheck with delays <code>[30s, 60s, 180s]</code>. Resets when inbox empties.</p>
+
+<h3>Crash Recovery</h3>
+<ol>
+  <li>On start: scan <code>agent_state</code> for <code>status='working'</code></li>
+  <li>Check if PID alive: <code>process.kill(pid, 0)</code></li>
+  <li>Dead PID &rarr; mark idle (recovered)</li>
+  <li>Rate limit: 3+ crashes in 10min &rarr; <code>status=errored</code>, skip ticks</li>
+</ol>
+
+<h3>Shutdown</h3>
+<pre>daemon.stop():
+  running = false &rarr; clear tick timers &rarr; stop followup scheduler
+  &rarr; drain all lanes &rarr; remove PID file</pre>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="triage">Triage Pipeline</h2>
+<div class="section">
+
+<h3>Stage 1: Deterministic Scoring</h3>
+<table>
+  <tr><th>Component</th><th>Weight</th><th>Logic</th></tr>
+  <tr><td>Authority</td><td>0.25</td><td>Super-user=10, Manager=10, Report=3, Peer=5, Unknown=1</td></tr>
+  <tr><td>Urgency</td><td>0.25</td><td>metadata.urgent=10, else 0</td></tr>
+  <tr><td>Conversation</td><td>0.20</td><td>DM=8, Group=5</td></tr>
+  <tr><td>Recency</td><td>0.15</td><td>Linear decay: 0h=10, 24h=0</td></tr>
+  <tr><td>Mention</td><td>0.15</td><td>@agent in mentions=10, else 0</td></tr>
+</table>
+<p>Formula: <code>score = &Sigma;(component &times; weight)</code>, clamped [0, 10]</p>
+
+<h3>Stage 2: LLM Classification</h3>
+<table>
+  <tr><th>Class</th><th>Trigger</th><th>Action</th></tr>
+  <tr><td><span class="tag tag-act">ACT_NOW</span></td><td>Manager request, urgent, @mention with question</td><td>Spawn full agent</td></tr>
+  <tr><td><span class="tag tag-queue">QUEUE</span></td><td>New task, non-urgent request, FYI needing follow-up</td><td>Append to memory, mark read</td></tr>
+  <tr><td><span class="tag tag-note">NOTE</span></td><td>Announcements, status updates, useful context</td><td>Append to memory, mark read</td></tr>
+  <tr><td><span class="tag tag-ignore">IGNORE</span></td><td>Other teams, social chatter</td><td>Mark read, drop</td></tr>
+</table>
+<p><strong>Override</strong>: Super-user messages &rarr; always <span class="tag tag-act">ACT_NOW</span></p>
+<p><strong>Timeout</strong>: 5 minutes. On failure: default all to <span class="tag tag-queue">QUEUE</span></p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="followups">Followup System</h2>
+<div class="section">
+
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> registered
+  registered --> check_command: next_check_at reached
+  check_command --> done: exit 0
+  check_command --> spawn_agent: exit 1 / no command
+  check_command --> next_attempt: exit 2 (skip)
+  spawn_agent --> next_attempt: not final
+  spawn_agent --> expired: final attempt
+  next_attempt --> check_command: backoff interval
+  done --> [*]
+  expired --> [*]
+</div>
+
+<h3>Tag Format</h3>
+<pre>FOLLOWUP: &lt;description&gt;
+| check: &lt;shell command&gt;    # exit 0=done, 1=not done, 2=skip
+| backoff: 10m, 30m, 1h     # intervals between checks</pre>
+
+<h3>Storage (orchestrator.db)</h3>
+<pre>CREATE TABLE followups (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id         TEXT NOT NULL,
+  description      TEXT NOT NULL,
+  check_command    TEXT,
+  backoff_schedule TEXT NOT NULL,     -- JSON array of ms values
+  attempt          INTEGER DEFAULT 0,
+  next_check_at    DATETIME NOT NULL,
+  last_check_exit  INTEGER,
+  last_check_output TEXT,
+  status           TEXT DEFAULT 'open', -- open | done | expired | cancelled
+  created_at       DATETIME,
+  closed_at        DATETIME
+);</pre>
+
+<h3>Scheduler Logic</h3>
+<ol>
+  <li>Execute <code>check_command</code> (15s timeout)</li>
+  <li>Exit 0 &rarr; close as <strong>done</strong></li>
+  <li>Exit 2 &rarr; skip, advance to next interval</li>
+  <li>Exit 1 or no command &rarr; spawn agent with followup context</li>
+  <li>Final attempt: agent must resolve, escalate, or cancel</li>
+  <li>Busy agent guard: retry in 2 minutes without consuming attempt</li>
+</ol>
+
+<h3>Agent Context (on followup invocation)</h3>
+<pre># Follow-Up Check (attempt 2 of 3)
+**Description:** PR review pending
+**Check result** (exit 1): open
+**Previous check output:** open
+**Backoff remaining:** 1h
+---
+[Full system prompt + memory]</pre>
+<p>Final attempt header includes <code>[FINAL]</code> &mdash; agent must make terminal decision.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="dashboard">Dashboard &amp; SSE</h2>
+<div class="section">
+
+<div class="mermaid">
+sequenceDiagram
+  participant B as Browser (React)
+  participant S as Server (Express)
+  participant D as Daemon (in-process)
+  participant A as Agent (Claude CLI)
+
+  B->>S: GET /api/events (SSE)
+  S-->>B: connected + initial state
+  B->>S: POST /api/chat {content}
+  S->>D: signalConversation()
+  D->>A: spawnClaude()
+  A-->>D: response + FOLLOWUP
+  D->>S: EventBus: agent:state
+  S-->>B: SSE: agent-state
+  D->>S: EventBus: audit:invocation
+  S-->>B: SSE: audit-invocation
+</div>
+
+<h3>Server Startup</h3>
+<ol>
+  <li>Create HiveContext (all stores)</li>
+  <li>Initialize EventBus</li>
+  <li>Start daemon in-process if no external daemon running</li>
+  <li>Wire event bus: <code>messages.send()</code> &rarr; <code>message:new</code>, <code>state.updateStatus()</code> &rarr; <code>agent:state</code>, <code>audit.logInvocation()</code> &rarr; <code>audit:invocation</code></li>
+  <li>Express app + SSE endpoint + static React build</li>
+  <li>Hot-reload every 30s (detects new agents)</li>
+</ol>
+
+<h3>API Endpoints</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+  <tr><td>GET</td><td>/api/org</td><td>Full org tree</td></tr>
+  <tr><td>GET</td><td>/api/agents</td><td>All agent states</td></tr>
+  <tr><td>GET</td><td>/api/agents/:alias</td><td>Agent detail + files + invocations</td></tr>
+  <tr><td>POST</td><td>/api/chat</td><td>Post to CEO's DM (super-user)</td></tr>
+  <tr><td>POST</td><td>/api/chat/post</td><td>Post to any conversation as any agent</td></tr>
+  <tr><td>GET</td><td>/api/conversations</td><td>List all conversations</td></tr>
+  <tr><td>GET</td><td>/api/conversations/:name/messages</td><td>Message history</td></tr>
+  <tr><td>GET</td><td>/api/audit</td><td>Invocation log (filterable)</td></tr>
+  <tr><td>GET</td><td>/api/audit/totals</td><td>Token totals per agent</td></tr>
+  <tr><td>GET</td><td>/api/status</td><td>Daemon status</td></tr>
+  <tr><td>POST</td><td>/api/signal</td><td>Trigger agent inbox check</td></tr>
+  <tr><td>GET</td><td>/api/events</td><td>SSE stream</td></tr>
+</table>
+
+<h3>SSE Events</h3>
+<table>
+  <tr><th>Event</th><th>Trigger</th><th>Payload</th></tr>
+  <tr><td>connected</td><td>Client connects</td><td>{ clientId }</td></tr>
+  <tr><td>agent-state</td><td>Status change</td><td>{ agentId, status, currentTask }</td></tr>
+  <tr><td>new-message</td><td>Message posted</td><td>{ id, conversation, sender, content }</td></tr>
+  <tr><td>audit-invocation</td><td>Agent invocation logged</td><td>{ agentId, model, tokensIn, ... }</td></tr>
+  <tr><td>heartbeat</td><td>30s interval</td><td>Full agent state (if changed)</td></tr>
+</table>
+
+<h3>Frontend</h3>
+<table>
+  <tr><th>Route</th><th>Page</th><th>Content</th></tr>
+  <tr><td>/</td><td>HomePage</td><td>Status cards, recent chat, activity, audit</td></tr>
+  <tr><td>/org</td><td>OrgPage</td><td>Org tree visualization</td></tr>
+  <tr><td>/chat</td><td>ChatPage</td><td>Chat interface</td></tr>
+  <tr><td>/conversations</td><td>ConversationsPage</td><td>Conversation list</td></tr>
+  <tr><td>/audit</td><td>AuditPage</td><td>Audit log viewer</td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="memory">Memory System</h2>
+<div class="section">
+
+<div class="mermaid">
+graph LR
+  FILES["MEMORY.md<br/>memory/*.md"] -->|"chunk + embed"| IDX["Index"]
+  IDX --> FTS["FTS5<br/>(BM25 text)"]
+  IDX --> VEC["vec0<br/>(384-dim vectors)"]
+  QUERY["Search query"] --> FTS
+  QUERY --> VEC
+  FTS --> RANK["Hybrid rank"]
+  VEC --> RANK
+  RANK --> RESULTS["Top K chunks"]
+</div>
+
+<h3>Per-Agent Storage</h3>
+<pre>data/memory/{agentId}.sqlite</pre>
+
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>files</td><td>Track indexed files (path, hash, mtime)</td></tr>
+  <tr><td>chunks</td><td>Text chunks with line ranges</td></tr>
+  <tr><td>chunks_fts</td><td>FTS5 virtual table (BM25 search)</td></tr>
+  <tr><td>chunks_vec</td><td>sqlite-vec virtual table (vector similarity)</td></tr>
+</table>
+
+<h3>Source Files Indexed</h3>
+<ol>
+  <li><strong>MEMORY.md</strong> &mdash; Curated long-term notes (agent-editable)</li>
+  <li><strong>memory/*.md</strong> &mdash; Last 3 days of daily logs (auto-appended)</li>
+</ol>
+
+<h3>Indexing</h3>
+<ul>
+  <li>Hash-based change detection (skip unchanged files)</li>
+  <li>Split by paragraph or fixed size</li>
+  <li>Embed via HuggingFace transformers (local, offline)</li>
+  <li>Runs on daemon startup (background, non-blocking)</li>
+</ul>
+
+<h3>Daily Log Format</h3>
+<pre>- [2026-03-28T19:30:00Z] @sender in conversation: message snippet...</pre>
+<p>Written during checkWork when messages classified as NOTE/QUEUE. Written <strong>before</strong> marking read (crash safety).</p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="data">Data Stores</h2>
+<div class="section">
+
+<p>All SQLite, WAL mode for concurrent reads.</p>
+
+<div class="mermaid">
+graph LR
+  HIVE["hive.db<br/>people, messages,<br/>conversations, cursors"] --- ORCH["orchestrator.db<br/>agent_state,<br/>followups"]
+  ORCH --- AUDIT["audit.db<br/>invocations"]
+  AUDIT --- MEM["memory/{id}.sqlite<br/>chunks, FTS5, vec0"]
+</div>
+
+<h3>hive.db</h3>
+<table>
+  <tr><th>Table</th><th>Key</th><th>Purpose</th></tr>
+  <tr><td>people</td><td>id (int)</td><td>Agents + hierarchy (reportsTo)</td></tr>
+  <tr><td>conversations</td><td>id (text)</td><td>DMs + groups</td></tr>
+  <tr><td>conversation_members</td><td>(convId, personId)</td><td>Group membership</td></tr>
+  <tr><td>messages</td><td>(convId, seq)</td><td>Per-conv sequential messages</td></tr>
+  <tr><td>cursors</td><td>(personId, convId)</td><td>Read position tracking</td></tr>
+</table>
+
+<h3>orchestrator.db</h3>
+<table>
+  <tr><th>Table</th><th>Key</th><th>Purpose</th></tr>
+  <tr><td>agent_state</td><td>agent_id (text)</td><td>Status (idle/working/errored), PID, heartbeat</td></tr>
+  <tr><td>followups</td><td>id (int)</td><td>Tracked commitments with backoff schedule</td></tr>
+</table>
+
+<h3>audit.db</h3>
+<table>
+  <tr><th>Table</th><th>Key</th><th>Purpose</th></tr>
+  <tr><td>invocations</td><td>id (uuid)</td><td>Agent invocation log: model, tokens, duration, summaries</td></tr>
+</table>
+
+<h3>Invocation Types</h3>
+<table>
+  <tr><th>Type</th><th>Trigger</th></tr>
+  <tr><td>checkWork</td><td>Inbox message classified ACT_NOW</td></tr>
+  <tr><td>followup</td><td>Followup scheduler fires</td></tr>
+  <tr><td>memory</td><td>Memory indexing</td></tr>
+  <tr><td>proposal</td><td>Approval workflow</td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cli">CLI Reference</h2>
+<div class="section">
+
+<h3>System</h3>
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td>hive init</td><td>Bootstrap new org (<code>--mission</code>, <code>--template</code>, <code>--timezone</code>)</td></tr>
+  <tr><td>hive start</td><td>Start daemon (<code>--tick-interval</code>)</td></tr>
+  <tr><td>hive stop</td><td>Stop daemon</td></tr>
+  <tr><td>hive status</td><td>Show agent statuses</td></tr>
+  <tr><td>hive org</td><td>Print org chart</td></tr>
+  <tr><td>hive doctor</td><td>Health checks (<code>--fix</code>)</td></tr>
+  <tr><td>hive dashboard</td><td>Start web UI (<code>--port</code>, <code>--no-open</code>)</td></tr>
+</table>
+
+<h3>Agent Management</h3>
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td>hive agent create</td><td><code>--alias --name --template --reports-to [--vibe --skills]</code></td></tr>
+  <tr><td>hive agent list</td><td>List all agents</td></tr>
+</table>
+
+<h3>Chat</h3>
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td>hive chat send @alias "msg"</td><td>Send DM (signals daemon for fast response)</td></tr>
+  <tr><td>hive chat inbox</td><td>Show unread messages</td></tr>
+  <tr><td>hive chat ack @alias [seq]</td><td>Mark read (blocked when HIVE_DAEMON_SPAWN=1)</td></tr>
+  <tr><td>hive chat history @alias</td><td>Message history (<code>--limit</code>)</td></tr>
+  <tr><td>hive chat search &lt;query&gt;</td><td>Full-text search (<code>--limit</code>)</td></tr>
+  <tr><td>hive chat group list</td><td>List groups</td></tr>
+  <tr><td>hive chat group create &lt;name&gt;</td><td>Create group</td></tr>
+  <tr><td>hive chat group add/remove</td><td>Manage members</td></tr>
+</table>
+
+<h3>Memory</h3>
+<table>
+  <tr><th>Command</th><th>Description</th></tr>
+  <tr><td>hive memory search &lt;agent&gt; &lt;query&gt;</td><td>Semantic search (<code>-n</code> limit)</td></tr>
+  <tr><td>hive memory index</td><td>Re-index all agent memories</td></tr>
+  <tr><td>hive memory status</td><td>Show indexing status</td></tr>
+</table>
+</div>
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#161b22',
+    primaryTextColor: '#e6edf3',
+    primaryBorderColor: '#30363d',
+    lineColor: '#58a6ff',
+    secondaryColor: '#1f2937',
+    tertiaryColor: '#0d1117',
+    noteTextColor: '#e6edf3',
+    noteBkgColor: '#161b22'
+  },
+  flowchart: { curve: 'basis', padding: 12 },
+  sequence: { mirrorActors: false }
+});
+
+// Collapsible sections
+document.querySelectorAll('h2').forEach(h2 => {
+  h2.addEventListener('click', () => {
+    const section = h2.nextElementSibling;
+    if (section && section.classList.contains('section')) {
+      section.classList.toggle('hidden');
+      h2.classList.toggle('collapsed');
+    }
+  });
+});
+
+// Build nav
+const nav = document.getElementById('nav');
+document.querySelectorAll('h2[id]').forEach(h2 => {
+  const a = document.createElement('a');
+  a.href = '#' + h2.id;
+  a.textContent = h2.textContent;
+  nav.appendChild(a);
+});
+
+// Highlight active nav on scroll
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      nav.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+      const link = nav.querySelector(`a[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+document.querySelectorAll('h2[id]').forEach(h2 => observer.observe(h2));
+</script>
+</body>
+</html>
