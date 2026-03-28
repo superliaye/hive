@@ -13,6 +13,7 @@ export function ChatPage() {
   );
   const [rootWorking, setRootWorking] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   useSSEEvent('new-message', useCallback((event: any) => {
     if (conversation && event.conversation === conversation) {
@@ -39,14 +40,24 @@ export function ChatPage() {
 
   const rootName = meta?.rootName ?? 'CEO';
 
-  const sendMessage = async (text: string) => {
+  const sendMessage = async (text: string): Promise<boolean> => {
     setSending(true);
+    setSendError(null);
     try {
-      await fetch('/api/chat', {
+      const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
       });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        setSendError(body || `Send failed (HTTP ${res.status})`);
+        return false;
+      }
+      return true;
+    } catch {
+      setSendError('Network error — message not sent. Please try again.');
+      return false;
     } finally {
       setSending(false);
     }
@@ -59,6 +70,17 @@ export function ChatPage() {
         <p className="text-xs text-slate-500 font-mono">Direct message</p>
       </div>
       <ChatFeed messages={messages ?? []} rootWorking={rootWorking} rootName={rootName} />
+      {sendError && (
+        <div className="mx-4 mb-2 px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center justify-between gap-3">
+          <p className="text-sm text-red-400">{sendError}</p>
+          <button
+            onClick={() => setSendError(null)}
+            className="text-red-400 hover:text-red-300 text-xs shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       <ChatInput onSend={sendMessage} disabled={sending} rootName={rootName} />
     </div>
   );
