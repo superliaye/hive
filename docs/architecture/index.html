@@ -59,6 +59,11 @@
   .tag-note { background: #58a6ff22; color: var(--accent); border: 1px solid #58a6ff44; }
   .tag-ignore { background: #8b949e22; color: var(--muted); border: 1px solid #8b949e44; }
   .mermaid { margin: 12px 0; text-align: center; }
+  .mermaid svg text { fill: #e6edf3 !important; }
+  .mermaid svg .edgeLabel text { fill: #e6edf3 !important; }
+  .mermaid svg .edgeLabel rect { fill: #0d1117 !important; opacity: 0.9; }
+  .mermaid svg .cluster rect { fill: #0d111799 !important; }
+  .mermaid svg .cluster text { fill: #8b949e !important; }
   .mermaid-wide {
     width: 100vw;
     position: relative;
@@ -777,14 +782,25 @@ mermaid.initialize({
   startOnLoad: true,
   theme: 'dark',
   themeVariables: {
-    primaryColor: '#161b22',
+    primaryColor: '#1f2937',
     primaryTextColor: '#e6edf3',
     primaryBorderColor: '#30363d',
     lineColor: '#58a6ff',
     secondaryColor: '#1f2937',
-    tertiaryColor: '#0d1117',
+    secondaryTextColor: '#e6edf3',
+    secondaryBorderColor: '#30363d',
+    tertiaryColor: '#1f2937',
+    tertiaryTextColor: '#e6edf3',
+    tertiaryBorderColor: '#30363d',
+    nodeBorder: '#30363d',
+    mainBkg: '#1f2937',
+    nodeTextColor: '#e6edf3',
+    clusterBkg: '#0d111799',
+    clusterBorder: '#30363d',
+    titleColor: '#e6edf3',
+    edgeLabelBackground: '#0d1117',
     noteTextColor: '#e6edf3',
-    noteBkgColor: '#161b22'
+    noteBkgColor: '#1f2937'
   },
   flowchart: { curve: 'basis', padding: 12 },
   sequence: { mirrorActors: false }
