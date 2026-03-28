@@ -81,7 +81,7 @@ describe('Dashboard API routes', () => {
     expect(status).toBe(200);
     expect(body).toHaveProperty('agents');
     expect(body).toHaveProperty('root');
-    expect(body).toHaveProperty('channels');
+    expect(body).toHaveProperty('conversations');
     expect(Array.isArray(body.agents)).toBe(true);
     expect(body.agents.length).toBeGreaterThan(0);
     // Tree model: agents have id (alias), depth, parentId, childIds
@@ -128,7 +128,7 @@ describe('Dashboard API routes', () => {
 
   it('GET /api/conversations/:id/messages returns messages array', async () => {
     const conversationIds = ctx.access.getAccessibleConversations(0);
-    const conversationId = conversationIds[0] ?? 'board';
+    const conversationId = conversationIds[0] ?? 'dm:0:1';
     const { status, body } = await request(`/api/conversations/${conversationId}/messages`);
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);

@@ -41,7 +41,7 @@ export function createOrgRoutes(ctx: HiveContext): Router {
     res.json({
       root,
       agents,
-      channels: [],
+      conversations: [],
     });
   });
 
@@ -53,12 +53,12 @@ export function createOrgRoutes(ctx: HiveContext): Router {
     const rootName = root?.identity.name ?? 'CEO';
 
     const rootId = ctx.chatAdapter.resolveAlias(rootAlias);
-    const channel = ctx.channels.ensureDm(0, rootId);
+    const dm = ctx.conversations.ensureDm(0, rootId);
 
     res.json({
       rootAlias,
       rootName,
-      boardChannel: channel.id,
+      rootConversation: dm.id,
     });
   });
 

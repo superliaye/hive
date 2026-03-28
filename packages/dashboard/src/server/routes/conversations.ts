@@ -41,8 +41,8 @@ export function createConversationRoutes(ctx: HiveContext): Router {
       const history = ctx.messages.history(conversationId, { limit });
 
       res.json(history.messages.map(m => ({
-        id: `${m.channelId}:${m.seq}`,
-        channel: m.channelId,
+        id: `${m.conversationId}:${m.seq}`,
+        conversation: m.conversationId,
         sender: m.senderAlias,
         content: m.content,
         timestamp: m.timestamp,

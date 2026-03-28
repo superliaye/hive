@@ -95,7 +95,7 @@ export class SSEManager {
       if (this.clients.length === 0) return;
       this.broadcast('new-message', {
         id: msg.id,
-        conversation: msg.channel,
+        conversation: msg.conversation,
         sender: msg.sender,
         content: msg.content,
         timestamp: msg.timestamp,

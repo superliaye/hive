@@ -7,7 +7,7 @@ import type { Message, OrgMeta } from '../types';
 
 export function ChatPage() {
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
-  const conversation = meta?.boardChannel;
+  const conversation = meta?.rootConversation;
   const { data: messages, setData } = useApi<Message[]>(
     conversation ? `/api/conversations/${conversation}/messages?limit=100` : null,
   );

@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 const links = [
   { to: '/', label: 'Home', icon: '\u2302' },
   { to: '/org', label: 'Organization', icon: '\u25C8' },
-  { to: '/chat', label: 'Board Chat', icon: '\u25C9' },
+  { to: '/chat', label: 'Chat', icon: '\u25C9' },
   { to: '/conversations', label: 'Conversations', icon: '\u25A3' },
   { to: '/audit', label: 'Audit', icon: '\u25A7' },
 ];

@@ -79,5 +79,5 @@ export interface Conversation {
 export interface OrgMeta {
   rootAlias: string | null;
   rootName: string;
-  boardChannel: string;
+  rootConversation: string;
 }
