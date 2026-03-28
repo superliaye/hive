@@ -116,7 +116,7 @@ graph LR
     CW --> S1["Score<br/>(deterministic)"]
     S1 --> S2["Triage<br/>(haiku LLM)"]
     S2 -->|"IGNORE"| MARK["Mark Read"]
-    S2 -->|"NOTE / QUEUE"| ILOG["Write inbox-log"]
+    S2 -->|"NOTE / QUEUE"| ILOG["Write triage-log"]
 
     CW -->|"check due<br/>followups"| FCHECK{"Run check<br/>commands"}
     FCHECK -->|"exit 0"| FCLOSE["Close followup"]
@@ -140,14 +140,14 @@ graph LR
     PROMPT --- SOUL["SOUL.md"]
     PROMPT --- SKILLS["Skills/*.md"]
     PROMPT --- MEMFILE["MEMORY.md<br/>(agent-managed)"]
-    PROMPT --- INBOX["inbox-log/<br/>(last N days, daemon-written)"]
+    PROMPT --- TLOG["triage-log/<br/>(last N days, daemon-written)"]
     PROMPT --- PRIO["PRIORITIES.md"]
   end
 
   DASH -->|"POST /api/chat"| CHAT[(Chat DB)]
   CHAT -->|"signal / tick"| CW
-  ILOG -->|"append"| INBOXSTORE[("inbox-log/<br/>per agent")]
-  INBOXSTORE -.->|"last N days"| INBOX
+  ILOG -->|"append"| TLOGSTORE[("triage-log/<br/>per agent")]
+  TLOGSTORE -.->|"last N days"| TLOG
   S2 -->|"log"| AUDIT[("Audit Store")]
   FCHECK -->|"log each"| AUDIT
   PARSE -->|"ACTION tag"| AUDIT

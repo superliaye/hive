@@ -52,7 +52,7 @@ export function assemblePrompt(config: AgentConfig): string {
     config.files.priorities,
     config.files.routine,
     config.files.memory,
-    config.files.inboxLog,
+    config.files.triageLog,
     ACTION_TAG_INSTRUCTION,
   ].filter(s => s.trim().length > 0);
 

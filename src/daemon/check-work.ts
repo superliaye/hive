@@ -120,11 +120,11 @@ function buildWorkInput(messages: ScoredMessage[], triageResults: TriageResult[]
 }
 
 /**
- * Append a triage result to the agent's inbox log (inbox-log/YYYY-MM-DD.md).
+ * Append a triage result to the agent's triage log (triage-log/YYYY-MM-DD.md).
  * Separate from the agent's memory system which the agent manages itself.
  */
-function appendToInboxLog(agentDir: string, entry: string): void {
-  const logDir = path.join(agentDir, 'inbox-log');
+function appendToTriageLog(agentDir: string, entry: string): void {
+  const logDir = path.join(agentDir, 'triage-log');
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }
@@ -298,7 +298,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       const msg = ranked.find(m => m.messageId === result.messageId);
       if (msg) {
         const entry = `- [${msg.timestamp.toISOString()}] @${msg.sender} in #${msg.conversation}: ${msg.content.slice(0, 200)}`;
-        appendToInboxLog(agent.dir, entry);
+        appendToTriageLog(agent.dir, entry);
       }
     }
 

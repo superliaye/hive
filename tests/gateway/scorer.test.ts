@@ -28,7 +28,7 @@ function makeAgent(alias: string, overrides: Partial<AgentConfig> = {}): AgentCo
     reportsTo: null,
     directReports: [],
     files: {
-      identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', inboxLog: '', protocols: '', skills: '',
+      identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', triageLog: '', protocols: '', skills: '',
     },
     ...overrides,
   };

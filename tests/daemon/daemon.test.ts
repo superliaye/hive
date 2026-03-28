@@ -36,7 +36,7 @@ function makeOrgChart(): OrgChart {
     dir: '/tmp/org/ceo',
     reportsTo: null,
     directReports: [],
-    files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', inboxLog: '', protocols: '', skills: '' },
+    files: { identity: '', soul: '', bureau: '', priorities: '', routine: '', memory: '', triageLog: '', protocols: '', skills: '' },
   };
 
   return {

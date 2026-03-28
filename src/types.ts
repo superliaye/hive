@@ -21,7 +21,7 @@ export interface AgentConfig {
     priorities: string;             // Full content of PRIORITIES.md
     routine: string;                // Full content of ROUTINE.md
     memory: string;                 // Full content of MEMORY.md (agent-managed)
-    inboxLog: string;               // Recent triage results (daemon-managed, last N days)
+    triageLog: string;              // Recent triage results (daemon-managed, last N days)
     protocols: string;              // Full content of protocols/ (shared)
     skills: string;                 // Combined content of .claude/skills/*/SKILL.md
   };
