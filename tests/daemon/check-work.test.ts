@@ -129,9 +129,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'What is the status?', timestamp: new Date(), score: 9.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Super user request', score: 9.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Super user request', score: 9.0 }],
+      tokensIn: 100, tokensOut: 50, durationMs: 200, model: 'haiku',
+    });
     mockSpawnClaude.mockResolvedValue({
       stdout: JSON.stringify({ result: 'Status: all good.\nACTION: Reported team status', usage: { input_tokens: 500, output_tokens: 100 } }),
       stderr: '',
@@ -162,9 +163,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'all-hands', sender: 'random', content: 'Lunch at noon', timestamp: new Date(), score: 2.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'IGNORE', reasoning: 'Irrelevant', score: 2.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'IGNORE', reasoning: 'Irrelevant', score: 2.0 }],
+      tokensIn: 80, tokensOut: 30, durationMs: 150, model: 'haiku',
+    });
 
     const mockMarkRead = vi.fn(async () => {});
     const ctx = makeCtx({
@@ -200,9 +202,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'Do it', timestamp: new Date(), score: 9.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 }],
+      tokensIn: 100, tokensOut: 50, durationMs: 200, model: 'haiku',
+    });
 
     let statusDuringWork: string | undefined;
     mockSpawnClaude.mockImplementation(async () => {
@@ -227,9 +230,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'urgent', timestamp: new Date(), score: 9.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'urgent', score: 9.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'urgent', score: 9.0 }],
+      tokensIn: 100, tokensOut: 50, durationMs: 200, model: 'haiku',
+    });
     mockSpawnClaude.mockRejectedValue(new Error('segfault'));
 
     const ctx = makeCtx({ getUnread: vi.fn(async () => unread) });
@@ -249,9 +253,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'all-hands', sender: 'ceo', content: 'Q2 goals announced', timestamp: new Date(), score: 4.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'NOTE', reasoning: 'Informational', score: 4.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'NOTE', reasoning: 'Informational', score: 4.0 }],
+      tokensIn: 90, tokensOut: 40, durationMs: 180, model: 'haiku',
+    });
 
     const mockMarkRead = vi.fn(async () => {});
     const ctx = makeCtx({
@@ -274,9 +279,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 }],
+      tokensIn: 100, tokensOut: 50, durationMs: 200, model: 'haiku',
+    });
     mockSpawnClaude.mockResolvedValue({
       stdout: JSON.stringify({ result: 'All systems nominal.', usage: { input_tokens: 800, output_tokens: 200 } }),
       stderr: '',
@@ -311,9 +317,10 @@ describe('checkWork', () => {
     mockRankMessages.mockReturnValue([
       { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
     ]);
-    mockTriageMessages.mockResolvedValue([
-      { messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 },
-    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 }],
+      tokensIn: 100, tokensOut: 50, durationMs: 200, model: 'haiku',
+    });
     mockSpawnClaude.mockResolvedValue({
       stdout: JSON.stringify({ result: 'Done.', usage: { input_tokens: 4, cache_read_input_tokens: 1200, cache_creation_input_tokens: 300, output_tokens: 736 } }),
       stderr: '',

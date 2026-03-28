@@ -2,6 +2,14 @@ import type { ScoredMessage, TriageResult, TriageBatchOutput } from './types.js'
 import { parseTriageOutput } from './types.js';
 import { spawnClaude, buildTriageArgs } from '../agents/spawner.js';
 
+export interface TriageOutput {
+  results: TriageResult[];
+  tokensIn?: number;
+  tokensOut?: number;
+  durationMs?: number;
+  model?: string;
+}
+
 export interface TriageOptions {
   agentId: string;
   agentDir: string;
@@ -93,8 +101,8 @@ function createFallbackResults(messages: ScoredMessage[], reason: string): Triag
 export async function triageMessages(
   messages: ScoredMessage[],
   opts: TriageOptions,
-): Promise<TriageResult[]> {
-  if (messages.length === 0) return [];
+): Promise<TriageOutput> {
+  if (messages.length === 0) return { results: [] };
 
   const systemPrompt = buildTriagePrompt(opts.priorities, opts.bureau);
   const input = formatMessagesForTriage(messages);
@@ -109,11 +117,17 @@ export async function triageMessages(
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'spawn failed';
-    return createFallbackResults(messages, reason);
+    return { results: createFallbackResults(messages, reason) };
   }
 
   if (result.exitCode !== 0) {
-    return createFallbackResults(messages, `claude exited with code ${result.exitCode}`);
+    return {
+      results: createFallbackResults(messages, `claude exited with code ${result.exitCode}`),
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+      durationMs: result.durationMs,
+      model: 'haiku',
+    };
   }
 
   // Claude CLI with --output-format json wraps the response in an envelope:
@@ -140,13 +154,25 @@ export async function triageMessages(
     parsed = parseTriageOutput(triageJson);
   } catch (err) {
     const reason = err instanceof Error ? err.message : 'parse failed';
-    return createFallbackResults(messages, reason);
+    return {
+      results: createFallbackResults(messages, reason),
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+      durationMs: result.durationMs,
+      model: 'haiku',
+    };
   }
 
   // Merge: preserve Stage 1 scores, match by messageId
   const scoreMap = new Map(messages.map((m) => [m.messageId, m.score]));
-  return parsed.results.map((r) => ({
-    ...r,
-    score: scoreMap.get(r.messageId) ?? r.score,
-  }));
+  return {
+    results: parsed.results.map((r) => ({
+      ...r,
+      score: scoreMap.get(r.messageId) ?? r.score,
+    })),
+    tokensIn: result.tokensIn,
+    tokensOut: result.tokensOut,
+    durationMs: result.durationMs,
+    model: 'haiku',
+  };
 }

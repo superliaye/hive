@@ -242,13 +242,14 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
 
       // Triage via LLM
       log('triaging...');
-      triageResults = await triageMessages(ranked, {
+      const { results: triageOutput, tokensIn: triageTokensIn, tokensOut: triageTokensOut, durationMs: triageDurationMs, model: triageModel } = await triageMessages(ranked, {
         agentId: agent.person.alias,
         agentDir: agent.dir,
         priorities: agent.files.priorities,
         bureau: agent.files.bureau,
         timeoutMs: 300_000,
       });
+      triageResults = triageOutput;
 
       // Override: messages from super-user are ALWAYS ACT_NOW
       for (const result of triageResults) {
@@ -267,6 +268,27 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
 
       log(`triage: ACT_NOW=${actNow.length} NOTE=${notes.length} QUEUE=${queue.length} IGNORE=${ignore.length}`);
       for (const r of triageResults) log(`  ${r.messageId.slice(0, 8)}: ${r.classification} — ${r.reasoning}`);
+
+      // Triage audit logging
+      if (triageResults.length > 0) {
+        const counts: Record<string, number> = {};
+        for (const r of triageResults) {
+          counts[r.classification] = (counts[r.classification] || 0) + 1;
+        }
+        const breakdown = Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(', ');
+
+        ctx.audit.logInvocation({
+          agentId: agent.person.alias,
+          invocationType: 'triage',
+          model: triageModel || 'haiku',
+          tokensIn: triageTokensIn,
+          tokensOut: triageTokensOut,
+          durationMs: triageDurationMs,
+          inputSummary: `${triageResults.length} messages from ${new Set(ranked.map(m => m.conversation)).size} conversations`,
+          outputSummary: breakdown,
+          actionSummary: counts['ACT_NOW'] ? 'will-spawn' : 'no-spawn',
+        });
+      }
     }
 
     // Process NOTE + QUEUE — append to memory (but don't mark read yet — crash safety)

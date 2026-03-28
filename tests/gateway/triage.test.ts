@@ -57,13 +57,13 @@ describe('triageMessages', () => {
   });
 
   it('returns empty results for empty message batch', async () => {
-    const results = await triageMessages([], {
+    const output = await triageMessages([], {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: 'Build stuff',
       bureau: 'Reports to vp-eng',
     });
-    expect(results).toEqual([]);
+    expect(output.results).toEqual([]);
     expect(mockSpawnClaude).not.toHaveBeenCalled();
   });
 
@@ -89,16 +89,19 @@ describe('triageMessages', () => {
       makeScoredMessage({ messageId: 'msg-2', content: 'Random noise', score: 2.0 }),
     ];
 
-    const results = await triageMessages(messages, {
+    const output = await triageMessages(messages, {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: 'Build API endpoint',
       bureau: 'Reports to vp-eng',
     });
 
-    expect(results).toHaveLength(2);
-    expect(results[0].classification).toBe('ACT_NOW');
-    expect(results[1].classification).toBe('IGNORE');
+    expect(output.results).toHaveLength(2);
+    expect(output.results[0].classification).toBe('ACT_NOW');
+    expect(output.results[1].classification).toBe('IGNORE');
+    expect(output.tokensIn).toBe(200);
+    expect(output.tokensOut).toBe(100);
+    expect(output.model).toBe('haiku');
     expect(mockSpawnClaude).toHaveBeenCalledOnce();
   });
 
@@ -111,16 +114,16 @@ describe('triageMessages', () => {
     });
 
     const messages = [makeScoredMessage()];
-    const results = await triageMessages(messages, {
+    const output = await triageMessages(messages, {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: '',
       bureau: '',
     });
 
-    expect(results).toHaveLength(1);
-    expect(results[0].classification).toBe('QUEUE');
-    expect(results[0].reasoning).toContain('fallback');
+    expect(output.results).toHaveLength(1);
+    expect(output.results[0].classification).toBe('QUEUE');
+    expect(output.results[0].reasoning).toContain('fallback');
   });
 
   it('handles malformed JSON from Claude CLI — returns all as QUEUE', async () => {
@@ -132,15 +135,15 @@ describe('triageMessages', () => {
     });
 
     const messages = [makeScoredMessage()];
-    const results = await triageMessages(messages, {
+    const output = await triageMessages(messages, {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: '',
       bureau: '',
     });
 
-    expect(results).toHaveLength(1);
-    expect(results[0].classification).toBe('QUEUE');
+    expect(output.results).toHaveLength(1);
+    expect(output.results[0].classification).toBe('QUEUE');
   });
 
   it('preserves Stage 1 scores in triage results', async () => {
@@ -156,14 +159,14 @@ describe('triageMessages', () => {
     });
 
     const messages = [makeScoredMessage({ messageId: 'msg-1', score: 8.3 })];
-    const results = await triageMessages(messages, {
+    const output = await triageMessages(messages, {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: '',
       bureau: '',
     });
 
-    expect(results[0].score).toBe(8.3);
+    expect(output.results[0].score).toBe(8.3);
   });
 
   it('unwraps Claude CLI JSON envelope before parsing triage output', async () => {
@@ -188,16 +191,16 @@ describe('triageMessages', () => {
     });
 
     const messages = [makeScoredMessage({ messageId: 'msg-1', score: 6.0 })];
-    const results = await triageMessages(messages, {
+    const output = await triageMessages(messages, {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: 'Build API',
       bureau: 'Reports to vp-eng',
     });
 
-    expect(results).toHaveLength(1);
-    expect(results[0].classification).toBe('ACT_NOW');
-    expect(results[0].reasoning).toBe('Direct request from manager');
+    expect(output.results).toHaveLength(1);
+    expect(output.results[0].classification).toBe('ACT_NOW');
+    expect(output.results[0].reasoning).toBe('Direct request from manager');
   });
 
   it('strips markdown code fences from triage output', async () => {
@@ -221,14 +224,14 @@ describe('triageMessages', () => {
     });
 
     const messages = [makeScoredMessage({ messageId: 'msg-1', score: 8.0 })];
-    const results = await triageMessages(messages, {
+    const output = await triageMessages(messages, {
       agentId: 'eng-1',
       agentDir: '/tmp/org/ceo/engineering/eng-1',
       priorities: '',
       bureau: '',
     });
 
-    expect(results).toHaveLength(1);
-    expect(results[0].classification).toBe('ACT_NOW');
+    expect(output.results).toHaveLength(1);
+    expect(output.results[0].classification).toBe('ACT_NOW');
   });
 });

@@ -102,13 +102,14 @@ describe('Gateway Integration', () => {
         tokensOut: 80,
       });
 
-      const triageResults = await triageMessages(ranked, {
+      const triageOutput = await triageMessages(ranked, {
         agentId: 'eng-1',
         agentDir: agent.dir,
         priorities: agent.files.priorities,
         bureau: agent.files.bureau,
       });
 
+      const triageResults = triageOutput.results;
       expect(triageResults).toHaveLength(3);
       expect(triageResults.find(r => r.messageId === 'msg-urgent')?.classification).toBe('ACT_NOW');
       expect(triageResults.find(r => r.messageId === 'msg-normal')?.classification).toBe('QUEUE');
