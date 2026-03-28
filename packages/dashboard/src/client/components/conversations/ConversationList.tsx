@@ -29,8 +29,10 @@ export function ConversationList({ selectedConversation, onSelectConversation }:
                 : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
             }`}
           >
-            <span>{formatConversationName(ch.name, agentMap, ch.members, ch.displayName)}</span>
-            <span className="text-xs text-slate-600 ml-2">{ch.messageCount} msgs</span>
+            <span className="flex items-center min-w-0">
+              <span className="truncate">{formatConversationName(ch.name, agentMap, ch.members, ch.displayName)}</span>
+              <span className="text-xs text-slate-600 ml-2 shrink-0">{ch.messageCount} msgs</span>
+            </span>
           </button>
         ))}
         {conversations?.length === 0 && (

@@ -34,8 +34,8 @@ export function Sidebar({ onNavigate }: SidebarProps) {
               }`
             }
           >
-            <span className="text-base">{link.icon}</span>
-            {link.label}
+            <span className="text-base shrink-0">{link.icon}</span>
+            <span className="truncate">{link.label}</span>
           </NavLink>
         ))}
       </div>
