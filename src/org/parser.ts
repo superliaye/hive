@@ -3,7 +3,10 @@ import path from 'path';
 import matter from 'gray-matter';
 import type { AgentConfig, AgentIdentity, OrgChart, Person } from '../types.js';
 
-const SKIP_DIRS = ['.claude', '.workspace', '.archive', '.proposals', 'memory', 'node_modules', '.git'];
+const SKIP_DIRS = ['.claude', '.workspace', '.archive', '.proposals', 'memory', 'inbox-log', 'node_modules', '.git'];
+
+/** Number of recent inbox-log daily files to include in agent context. */
+const INBOX_LOG_DAYS = 3;
 
 // Pattern: {id}-{alias} folder name
 const FOLDER_PATTERN = /^(\d+)-(.+)$/;
@@ -52,6 +55,31 @@ async function loadMemory(dir: string): Promise<string> {
 }
 
 /**
+ * Load recent inbox log entries — triage results written by the daemon.
+ * Separate from agent-managed memory. Last N days, most recent first.
+ */
+async function loadInboxLog(dir: string): Promise<string> {
+  const logDir = path.join(dir, 'inbox-log');
+  try {
+    const files = await fs.readdir(logDir);
+    const dated = files
+      .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
+      .sort()
+      .reverse()
+      .slice(0, INBOX_LOG_DAYS);
+
+    const parts: string[] = [];
+    for (const file of dated) {
+      const content = await fs.readFile(path.join(logDir, file), 'utf-8');
+      if (content.trim()) {
+        parts.push(`## ${file.replace('.md', '')}\n${content.trim()}`);
+      }
+    }
+    return parts.length > 0 ? `# Inbox Log (last ${INBOX_LOG_DAYS} days)\n\n${parts.join('\n\n')}` : '';
+  } catch { return ''; }
+}
+
+/**
  * Load all SKILL.md files from the agent's .claude/skills/ directory.
  */
 async function loadSkills(dir: string): Promise<string> {
@@ -87,6 +115,7 @@ export async function readAgentFiles(dir: string, sharedProtocols?: string): Pro
     priorities: await read('PRIORITIES.md'),
     routine: await read('ROUTINE.md'),
     memory: await loadMemory(dir),
+    inboxLog: await loadInboxLog(dir),
     protocols: sharedProtocols ?? '',
     skills: await loadSkills(dir),
   };

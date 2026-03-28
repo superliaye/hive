@@ -59,6 +59,8 @@
   .tag-note { background: #58a6ff22; color: var(--accent); border: 1px solid #58a6ff44; }
   .tag-ignore { background: #8b949e22; color: var(--muted); border: 1px solid #8b949e44; }
   .mermaid { margin: 12px 0; text-align: center; }
+  .mermaid-wide { margin: 24px -40px; text-align: center; }
+  @media (max-width: 800px) { .mermaid-wide { margin: 12px 0; } }
   .toc { columns: 2; column-gap: 24px; margin: 12px 0; }
   .toc a { display: block; padding: 3px 0; color: var(--muted); font-size: 13px; }
   .toc a:hover { color: var(--accent); }
@@ -102,11 +104,10 @@
 <h2 id="overview">System Overview</h2>
 <div class="section">
 
-<div class="mermaid">
-graph TB
+<div class="mermaid-wide mermaid">
+graph LR
   U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
   DASH -->|"SSE events"| U
-  DASH -->|"POST /api/chat"| CHAT[(Chat DB<br/>DMs + Groups)]
 
   subgraph daemon ["Daemon (central orchestrator)"]
     direction TB
@@ -114,9 +115,8 @@ graph TB
     CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
     CW --> S1["Score<br/>(deterministic)"]
     S1 --> S2["Triage<br/>(haiku LLM)"]
-    S2 -->|"NOTE / QUEUE"| ROUTE["Process results"]
     S2 -->|"IGNORE"| MARK["Mark Read"]
-    ROUTE --> MARK
+    S2 -->|"NOTE / QUEUE"| ILOG["Write inbox-log"]
 
     CW -->|"check due<br/>followups"| FCHECK{"Run check<br/>commands"}
     FCHECK -->|"exit 0"| FCLOSE["Close followup"]
@@ -134,17 +134,30 @@ graph TB
     FTIMER -->|"due"| CW
   end
 
+  subgraph agent ["Agent Process ×N (stateless, isolated)"]
+    direction TB
+    PROMPT["System Prompt"] --- ID["IDENTITY.md"]
+    PROMPT --- SOUL["SOUL.md"]
+    PROMPT --- SKILLS["Skills/*.md"]
+    PROMPT --- MEMFILE["MEMORY.md<br/>(agent-managed)"]
+    PROMPT --- INBOX["inbox-log/<br/>(last N days, daemon-written)"]
+    PROMPT --- PRIO["PRIORITIES.md"]
+  end
+
+  DASH -->|"POST /api/chat"| CHAT[(Chat DB)]
   CHAT -->|"signal / tick"| CW
-  ROUTE -->|"append"| MEM["Memory File ×N"]
+  ILOG -->|"append"| INBOXSTORE[("inbox-log/<br/>per agent")]
+  INBOXSTORE -.->|"last N days"| INBOX
   S2 -->|"log"| AUDIT[("Audit Store")]
   FCHECK -->|"log each"| AUDIT
   PARSE -->|"ACTION tag"| AUDIT
 
-  SPAWN -.->|"spawnClaude()"| AGENT["Agent Process ×N<br/>(stateless, isolated)"]
-  AGENT -.->|"hive chat send<br/>(side effect)"| CHAT
+  SPAWN -.->|"spawnClaude()"| PROMPT
+  agent -.->|"hive chat send<br/>(side effect)"| CHAT
   CW -.->|"events"| DASH
 
   style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
+  style agent fill:transparent,stroke:#3fb950,stroke-width:2px
 </div>
 
 <h3>Module Map</h3>

@@ -66,6 +66,7 @@ function makeAgent(overrides: Partial<AgentConfig> = {}): AgentConfig {
       priorities: '# Priorities\n## Ready\n1. Ship Plan 4',
       routine: '# Routine',
       memory: '',
+      inboxLog: '',
       protocols: '',
       skills: '',
     },

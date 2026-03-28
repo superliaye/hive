@@ -120,17 +120,18 @@ function buildWorkInput(messages: ScoredMessage[], triageResults: TriageResult[]
 }
 
 /**
- * Append a note to the agent's memory file (memory/YYYY-MM-DD.md).
+ * Append a triage result to the agent's inbox log (inbox-log/YYYY-MM-DD.md).
+ * Separate from the agent's memory system which the agent manages itself.
  */
-function appendToMemoryFile(agentDir: string, entry: string): void {
-  const memoryDir = path.join(agentDir, 'memory');
-  if (!fs.existsSync(memoryDir)) {
-    fs.mkdirSync(memoryDir, { recursive: true });
+function appendToInboxLog(agentDir: string, entry: string): void {
+  const logDir = path.join(agentDir, 'inbox-log');
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
   }
   const today = new Date().toISOString().slice(0, 10);
-  const memoryFile = path.join(memoryDir, `${today}.md`);
-  const existing = fs.existsSync(memoryFile) ? fs.readFileSync(memoryFile, 'utf-8') : '';
-  fs.writeFileSync(memoryFile, existing + entry + '\n');
+  const logFile = path.join(logDir, `${today}.md`);
+  const existing = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf-8') : '';
+  fs.writeFileSync(logFile, existing + entry + '\n');
 }
 
 /**
@@ -291,18 +292,14 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       }
     }
 
-    // Process NOTE + QUEUE — append to memory (but don't mark read yet — crash safety)
+    // Process NOTE + QUEUE — append to inbox log (separate from agent memory)
     const noteAndQueue = [...notes, ...queue];
     for (const result of noteAndQueue) {
       const msg = ranked.find(m => m.messageId === result.messageId);
       if (msg) {
         const entry = `- [${msg.timestamp.toISOString()}] @${msg.sender} in #${msg.conversation}: ${msg.content.slice(0, 200)}`;
-        appendToMemoryFile(agent.dir, entry);
+        appendToInboxLog(agent.dir, entry);
       }
-    }
-    if (noteAndQueue.length > 0) {
-      // Re-index memory after writing new notes
-      ctx.memoryReindex?.(agent.person.alias, agent.dir).catch(() => {});
     }
 
     // === Phase: Process due followups ===
