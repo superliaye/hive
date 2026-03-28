@@ -104,37 +104,39 @@
 
 <div class="mermaid">
 graph TB
-  subgraph ui [" "]
-    direction TB
-    U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
-    DASH -->|"SSE events"| U
-  end
-
-  subgraph core ["per agent (×N)"]
-    direction TB
-    CHAT[(Chat DB<br/>DMs + Groups)] -->|"signal / tick"| DAEMON["Daemon<br/>staggered ticks"]
-    DAEMON --> LANE["Agent Lane ×N<br/>(FIFO, concurrency=1)"]
-    LANE --> S1["Stage 1: Score<br/>(deterministic)"]
-    S1 --> S2["Stage 2: Triage<br/>(haiku LLM)"]
-    S2 -->|"NOTE/QUEUE"| MEM["Memory File<br/>(per agent)"]
-    S2 -->|"IGNORE"| MARK["Mark Read"]
-    S2 -->|"ACT_NOW"| S3["Stage 3: Spawn<br/>Claude CLI"]
-  end
-
+  U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
+  DASH -->|"SSE events"| U
   DASH -->|"POST /api/chat"| CHAT
-  DAEMON -->|"events"| DASH
-  S3 --> AGENTS["Agent Process ×N<br/>(stateless, isolated)"]
-  AGENTS -->|"hive chat send"| CHAT
-  AGENTS -->|"FOLLOWUP tags"| FUP["Followup Scheduler"]
-  AGENTS -->|"result"| CW["checkWork<br/>orchestrator"]
-  CW -->|"log"| AUDIT["Audit Store"]
-  FUP -->|"next_check_at"| FCHECK{"Check<br/>command"}
-  FCHECK -->|"exit 0"| FDONE["Close followup"]
-  FCHECK -->|"exit 1"| S3
-  FUP -->|"log"| AUDIT
 
-  style ui fill:transparent,stroke:#30363d
-  style core fill:transparent,stroke:#30363d
+  subgraph daemon ["Daemon (central orchestrator)"]
+    direction TB
+
+    CHAT[(Chat DB<br/>DMs + Groups)] -->|"signal / tick"| CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
+    CW --> S1["Score<br/>(deterministic)"]
+    S1 --> S2["Triage<br/>(haiku LLM)"]
+    S2 -->|"NOTE / QUEUE"| MEM["Append to<br/>Memory File ×N"]
+    S2 -->|"IGNORE"| MARK["Mark Read"]
+    MEM --> MARK
+    S2 -->|"ACT_NOW"| SPAWN["Spawn Claude CLI"]
+
+    SPAWN -->|"stdout JSON"| PARSE["Parse response"]
+    PARSE -->|"ACTION tag"| AUDIT["Audit Store"]
+    PARSE -->|"FOLLOWUP tags"| REG["Register followup"]
+    PARSE --> ADV["Advance cursors<br/>→ idle"]
+
+    REG --> FUP["Followup Scheduler"]
+    FUP -->|"timer fires"| FCHECK{"Run check<br/>command"}
+    FCHECK -->|"exit 0"| FCLOSE["Close followup"]
+    FCHECK -->|"exit 1 or<br/>no command"| FSPAWN["Spawn Claude CLI<br/>(followup mode)"]
+    FSPAWN --> FLOG["Log to audit<br/>→ reschedule / expire"]
+  end
+
+  SPAWN -.->|"spawnClaude()"| AGENT["Agent Process ×N<br/>(stateless, isolated)"]
+  FSPAWN -.->|"spawnClaude()"| AGENT
+  AGENT -.->|"hive chat send<br/>(side effect)"| CHAT
+  CW -.->|"events"| DASH
+
+  style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
 </div>
 
 <h3>Module Map</h3>
@@ -786,7 +788,7 @@ function addStackedCards() {
   // Target the first mermaid diagram only (system overview)
   const firstSvg = document.querySelector('.mermaid svg');
   if (!firstSvg) return;
-  const stackedNodeIds = ['LANE', 'AGENTS', 'MEM'];
+  const stackedNodeIds = ['CW', 'MEM', 'AGENT'];
   stackedNodeIds.forEach(id => {
     const node = firstSvg.querySelector(`[id^="flowchart-${id}-"]`);
     if (!node) return;
