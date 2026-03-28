@@ -113,12 +113,24 @@ export function buildChatCommand(deps: ChatCliDeps): Command {
     .command('ack <target> [seq]')
     .description('Mark messages as read. If no seq, marks all in that conversation.')
     .action(async (target: string, seqStr?: string) => {
+      // Daemon owns cursor management. Agent subprocesses must not move cursors
+      // or they'll skip messages the daemon hasn't processed yet.
+      if (process.env.HIVE_DAEMON_SPAWN) {
+        process.stdout.write('ack is managed by the daemon — no action taken\n');
+        return;
+      }
+
       const caller = getCallerIdentity(access);
       const conversationId = conversations.resolveExistingTarget(target, caller.id);
 
       const displayName = conversations.formatForDisplay(conversationId, caller.id);
       if (seqStr) {
         const seq = parseInt(seqStr, 10);
+        if (seq <= 0 || !Number.isFinite(seq)) {
+          process.stderr.write(`Invalid seq: ${seqStr}\n`);
+          process.exitCode = 1;
+          return;
+        }
         cursors.ack(caller.id, conversationId, seq);
         process.stdout.write(`Marked up to seq ${seq} as read in ${displayName}\n`);
       } else {
