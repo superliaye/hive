@@ -106,37 +106,38 @@
 graph TB
   U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
   DASH -->|"SSE events"| U
-  DASH -->|"POST /api/chat"| CHAT
+  DASH -->|"POST /api/chat"| CHAT[(Chat DB<br/>DMs + Groups)]
 
   subgraph daemon ["Daemon (central orchestrator)"]
     direction TB
 
-    CHAT[(Chat DB<br/>DMs + Groups)] -->|"signal / tick"| CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
-
+    CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
     CW --> S1["Score<br/>(deterministic)"]
     S1 --> S2["Triage<br/>(haiku LLM)"]
-    S2 -->|"log"| TAUDIT["Audit: triage row"]
-    S2 -->|"NOTE / QUEUE"| MEM["Append to<br/>Memory File ×N"]
     S2 -->|"IGNORE"| MARK["Mark Read"]
-    MEM --> MARK
 
     CW -->|"check due<br/>followups"| FCHECK{"Run check<br/>commands"}
     FCHECK -->|"exit 0"| FCLOSE["Close followup"]
     FCHECK -->|"exit 2"| FRESCHED["Reschedule"]
-    FCHECK -->|"log each"| FAUDIT["Audit: followup-check"]
 
     S2 -->|"ACT_NOW"| DECIDE{{"Spawn?"}}
     FCHECK -->|"exit 1"| DECIDE
     DECIDE -->|"yes"| SPAWN["Spawn Claude CLI<br/>(single entry point)"]
 
     SPAWN -->|"stdout JSON"| PARSE["Parse response"]
-    PARSE -->|"ACTION tag"| AUDIT["Audit: invocation row"]
-    PARSE -->|"FOLLOWUP tags"| REG["Register followup<br/>+ schedule timer"]
     PARSE --> ADV["Advance cursors<br/>→ idle"]
+    PARSE -->|"FOLLOWUP tags"| REG["Register followup"]
 
     REG --> FTIMER["Followup Timer"]
     FTIMER -->|"due"| CW
   end
+
+  CHAT -->|"signal / tick"| CW
+  S2 -->|"NOTE / QUEUE"| MEM["Memory File ×N"]
+  MEM --> MARK
+  S2 -->|"log"| AUDIT[("Audit Store")]
+  FCHECK -->|"log each"| AUDIT
+  PARSE -->|"ACTION tag"| AUDIT
 
   SPAWN -.->|"spawnClaude()"| AGENT["Agent Process ×N<br/>(stateless, isolated)"]
   AGENT -.->|"hive chat send<br/>(side effect)"| CHAT
