@@ -10,6 +10,19 @@
     --bg: #0d1117; --surface: #161b22; --border: #30363d;
     --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
     --green: #3fb950; --yellow: #d29922; --red: #f85149; --purple: #bc8cff;
+    --node-bg: #1c2333; --node-text: #e6edf3; --node-border: #444c56;
+    --edge-color: #58a6ff; --edge-label: #c9d1d9; --edge-label-bg: #0d1117;
+    --cluster-bg: rgba(13,17,23,0.5); --cluster-label: #b1bac4;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --surface: #f6f8fa; --border: #d0d7de;
+      --text: #1f2328; --muted: #656d76; --accent: #0969da;
+      --green: #1a7f37; --yellow: #9a6700; --red: #cf222e; --purple: #8250df;
+      --node-bg: #f6f8fa; --node-text: #1f2328; --node-border: #d0d7de;
+      --edge-color: #0969da; --edge-label: #656d76; --edge-label-bg: #ffffff;
+      --cluster-bg: rgba(246,248,250,0.7); --cluster-label: #656d76;
+    }
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -59,20 +72,20 @@
   .tag-note { background: #58a6ff22; color: var(--accent); border: 1px solid #58a6ff44; }
   .tag-ignore { background: #8b949e22; color: var(--muted); border: 1px solid #8b949e44; }
   .mermaid { margin: 12px 0; text-align: center; }
-  /* Override Mermaid dark theme's poor contrast */
-  .mermaid rect.basic, .mermaid rect.label-container { fill: #161b22 !important; stroke: #30363d !important; }
-  .mermaid .node polygon { fill: #161b22 !important; stroke: #30363d !important; }
-  .mermaid .node path { fill: #161b22 !important; stroke: #30363d !important; }
-  .mermaid .nodeLabel { color: #e6edf3 !important; }
-  .mermaid .edgeLabel .label-container { fill: #0d1117 !important; stroke: none !important; }
-  .mermaid .edgeLabel .nodeLabel { color: #8b949e !important; }
-  .mermaid .edgeLabel span.edgeLabel { color: #8b949e !important; }
-  .mermaid .edgeLabel span.edgeLabel p { color: #8b949e !important; }
-  .mermaid .edgeLabel .labelBkg { background: #0d1117 !important; }
-  .mermaid .flowchart-link { stroke: #58a6ff !important; }
-  .mermaid .marker path { fill: #58a6ff !important; stroke: #58a6ff !important; }
-  .mermaid .cluster rect { fill: #0d111788 !important; }
-  .mermaid .cluster-label .nodeLabel { color: #8b949e !important; }
+  /* Mermaid theme overrides using CSS custom properties */
+  .mermaid rect.basic, .mermaid rect.label-container { fill: var(--node-bg) !important; stroke: var(--node-border) !important; }
+  .mermaid .node polygon { fill: var(--node-bg) !important; stroke: var(--node-border) !important; }
+  .mermaid .node path { fill: var(--node-bg) !important; stroke: var(--node-border) !important; }
+  .mermaid .nodeLabel { color: var(--node-text) !important; }
+  .mermaid .edgeLabel .label-container { fill: var(--edge-label-bg) !important; stroke: none !important; }
+  .mermaid .edgeLabel .nodeLabel,
+  .mermaid .edgeLabel span.edgeLabel,
+  .mermaid .edgeLabel span.edgeLabel p { color: var(--edge-label) !important; }
+  .mermaid .edgeLabel .labelBkg { background: var(--edge-label-bg) !important; }
+  .mermaid .flowchart-link { stroke: var(--edge-color) !important; }
+  .mermaid .marker path { fill: var(--edge-color) !important; stroke: var(--edge-color) !important; }
+  .mermaid .cluster rect { fill: var(--cluster-bg) !important; }
+  .mermaid .cluster-label .nodeLabel { color: var(--cluster-label) !important; }
   .mermaid-wide {
     width: 100vw;
     position: relative;
