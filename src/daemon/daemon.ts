@@ -90,7 +90,7 @@ export class Daemon {
 
     // Stop follow-up scheduler
     this.followUpScheduler?.stop();
-    this.followUpStore?.close();
+    this.followUpStore?.dispose();
 
     // Clear all timers
     for (const timer of this.tickTimers.values()) {

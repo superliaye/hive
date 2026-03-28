@@ -128,8 +128,8 @@ function wireEventBus(ctx: HiveContext, bus: HiveEventBus, daemon: Daemon | null
   ctx.messages.send = (conversationId: string, senderId: number, content: string) => {
     const msg = originalSend(conversationId, senderId, content);
     bus.emit('message:new', {
-      id: `${msg.channelId}:${msg.seq}`,
-      conversation: msg.channelId,
+      id: `${msg.conversationId}:${msg.seq}`,
+      conversation: msg.conversationId,
       sender: msg.senderAlias,
       content: msg.content,
       timestamp: msg.timestamp,

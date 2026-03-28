@@ -36,7 +36,7 @@ export class FollowUpStore {
     this.migrate();
   }
 
-  close(): void {
+  dispose(): void {
     this.db.close();
   }
 
