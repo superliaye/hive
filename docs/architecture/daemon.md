@@ -59,30 +59,37 @@ This provides ~100ms response time to new messages, vs waiting for the next tick
 
 ## CheckWork Cycle (src/daemon/check-work.ts)
 
-The sole entry point for agent invocations:
+The sole entry point for agent invocations. Handles both inbox triage and followup processing in a single unified cycle:
 
 ```
 1. Guard: skip if agent.status == 'working'
 2. Read unread messages via ChatAdapter
-3. If empty → return (ZERO LLM cost)
+3. If empty inbox AND no due followups → return (ZERO LLM cost)
 4. Stage 1: Deterministic scoring (see triage.md)
 5. Stage 2: LLM triage via haiku (timeout: 5 min)
-6. Override: super-user messages → always ACT_NOW
-7. Process NOTE/QUEUE:
+6. Log triage audit row (message count, classification breakdown, tokens)
+7. Override: super-user messages → always ACT_NOW
+8. Process NOTE/QUEUE:
    - Append to memory file (memory/YYYY-MM-DD.md)
    - Mark read
-8. Process IGNORE:
+9. Process IGNORE:
    - Mark read
-9. If any ACT_NOW:
-   - Set status → working
-   - Assemble system prompt
-   - Enrich with memory search
-   - Spawn Claude CLI (Stage 3)
-   - Parse FOLLOWUP tags → register in scheduler
-   - Log to audit store
-   - Set status → idle
-10. Mark all messages read
-11. Return { agentInvoked, recheckImmediately }
+10. Process due followups:
+    - Run check commands (15s timeout each)
+    - exit 0 → close followup, log audit row
+    - exit 2 → reschedule, log audit row
+    - exit 1 / no command → flag for agent spawn, log audit row
+11. If ACT_NOW messages OR followups need spawn:
+    - Build combined work input
+    - Set status → working
+    - Spawn Claude CLI (single entry point)
+    - Parse ACTION + FOLLOWUP tags
+    - Log agent invocation audit row
+    - Advance/close/reschedule followups
+    - Set status → idle
+    - Advance cursors
+12. Mark all messages read
+13. Return { agentInvoked, recheckImmediately }
 ```
 
 **recheckImmediately**: If work was done, the agent may have new messages (from its own actions). Re-enqueue immediately to catch them.

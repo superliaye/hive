@@ -4,9 +4,9 @@
 
 Agents declare commitments via FOLLOWUP tags. The daemon tracks these and re-invokes agents on a backoff schedule until the commitment is resolved.
 
-Two event streams drive agent work:
+Two event streams feed into the unified checkWork cycle:
 1. **Inbox events** (reactive) — new messages trigger checkWork
-2. **Followup events** (proactive) — scheduled checks trigger followup invocations
+2. **Followup events** (proactive) — scheduled timers trigger checkWork via `enqueueCheckWork`
 
 ## FOLLOWUP Tag Format
 
@@ -43,23 +43,41 @@ CREATE TABLE followups (
 );
 ```
 
-## Scheduler Flow (src/daemon/followup-scheduler.ts)
+## Scheduler (timer-only) (src/daemon/followup-scheduler.ts)
+
+The FollowUpScheduler is a thin timer manager. It does NOT spawn agents.
 
 ```
-For each open followup where next_check_at <= now:
-  1. Execute check_command (shell, 15s timeout)
-  2. Exit 0 → close as "done"
-  3. Exit 2 → skip this tick, advance to next interval
-  4. Exit 1 or no check_command → spawn agent for followup
-  5. If final attempt (isFinal=true):
-     - Agent must make terminal decision: complete, escalate, or cancel
-     - Close as "expired" after agent runs
-  6. Otherwise: advance attempt, schedule next check at backoff[attempt]
+1. When a FOLLOWUP tag is parsed → store in DB + schedule timer
+2. When timer fires → signal daemon via enqueueCheckWork(agentId)
+3. Daemon enqueues checkWork for that agent's lane
+4. checkWork picks up due followups and processes them
 ```
+
+### Processing in checkWork
+
+When checkWork runs, it checks for due followups alongside inbox triage:
+
+```
+1. Run check command (if present, 15s timeout)
+2. Exit 0 → close as "done", log audit row
+3. Exit 2 (skip) + not final → advance to next interval, log audit row
+4. Exit 1 or no command → include in agent spawn context
+5. After agent completes:
+   - Not final → advance attempt, reschedule
+   - Final → close as "expired"
+```
+
+### Benefits over separate scheduler
+
+- **No race conditions**: Agent lane (concurrency=1) prevents followup and checkWork from running simultaneously
+- **Single spawn path**: All Claude CLI invocations go through checkWork
+- **Combined context**: Agent sees both inbox messages AND followup status in one invocation
+- **Unified audit trail**: All activity logged consistently
 
 ## Agent Followup Context
 
-When spawned for a followup, the agent receives:
+When checkWork spawns an agent that includes followup context, the agent receives:
 
 ```
 # Follow-Up Check (attempt 2 of 3)
@@ -87,4 +105,4 @@ registered → attempt 1 check → not done → spawn agent → schedule attempt
 
 ## Guard: Busy Agent
 
-If the agent is already working when a followup fires, the scheduler retries in 2 minutes instead of consuming an attempt.
+If the agent is already working when checkWork runs (e.g. from a followup timer), the lane's concurrency=1 ensures the work is queued and processed after the current invocation completes. No attempts are consumed while waiting.
