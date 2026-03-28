@@ -776,6 +776,35 @@ const observer = new IntersectionObserver(entries => {
   });
 }, { rootMargin: '-20% 0px -70% 0px' });
 document.querySelectorAll('h2[id]').forEach(h2 => observer.observe(h2));
+
+// Stacked-card effect: add offset duplicate rects behind multi-instance nodes
+function addStackedCards() {
+  // Target nodes that represent ×N instances
+  // Target the first mermaid diagram only (system overview)
+  const firstSvg = document.querySelector('.mermaid svg');
+  if (!firstSvg) return;
+  const stackedNodeIds = ['LANE', 'AGENTS', 'MEM'];
+  stackedNodeIds.forEach(id => {
+    const node = firstSvg.querySelector(`[id^="flowchart-${id}-"]`);
+    if (!node) return;
+    const rect = node.querySelector('rect.basic');
+    if (!rect) return;
+    const parent = rect.parentNode;
+    // Create 2 offset clones behind the original for a "stack" look
+    for (let i = 2; i >= 1; i--) {
+      const clone = rect.cloneNode(true);
+      clone.setAttribute('x', parseFloat(rect.getAttribute('x') || 0) + i * 6);
+      clone.setAttribute('y', parseFloat(rect.getAttribute('y') || 0) + i * 6);
+      clone.style.opacity = 0.4 + i * 0.15;
+      clone.style.fill = '#161b22';
+      clone.style.stroke = '#58a6ff';
+      clone.style.strokeWidth = '1px';
+      parent.insertBefore(clone, parent.firstChild);
+    }
+  });
+}
+// Run after Mermaid finishes rendering
+setTimeout(addStackedCards, 500);
 </script>
 </body>
 </html>
