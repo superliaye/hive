@@ -8,6 +8,10 @@ import { assemblePrompt } from '../agents/prompt-assembler.js';
 import type { AgentStateStore } from '../state/agent-state.js';
 import type { AuditStore } from '../audit/store.js';
 import type { CheckWorkResult, UnreadMessage } from './types.js';
+import { parseFollowUps } from './followup-parser.js';
+import { validateFollowUp } from './followup-validator.js';
+import type { FollowUpStore } from './followup-store.js';
+import type { FollowUpScheduler } from './followup-scheduler.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -25,6 +29,10 @@ export interface CheckWorkContext {
   memorySearch?: (agentId: string, query: string, limit?: number) => Promise<{ text: string; path: string; score: number }[]>;
   /** Optional: re-index agent memories after writes. */
   memoryReindex?: (agentId: string, agentDir: string) => Promise<void>;
+
+  /** Optional: follow-up tracker for registering FOLLOWUP tags from agent responses. */
+  followUpStore?: FollowUpStore;
+  followUpScheduler?: FollowUpScheduler;
 }
 
 function toScorerInput(msg: UnreadMessage): Omit<ScoredMessage, 'score'> {
@@ -283,6 +291,26 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           actionSummary = actionMatch[1].trim();
           // Strip the ACTION: line from the response before posting
           responseText = responseText.replace(/\n?^ACTION:\s*.+$/m, '').trim();
+        }
+
+        // Extract and register FOLLOWUP tags
+        if (ctx.followUpStore && ctx.followUpScheduler) {
+          const { followups, cleanedText } = parseFollowUps(responseText);
+          if (followups.length > 0) {
+            responseText = cleanedText;
+            for (const raw of followups) {
+              const { followup: validated, warnings } = validateFollowUp(raw);
+              for (const w of warnings) log(`followup warning: ${w}`);
+              const created = ctx.followUpStore.create({
+                agentId: agent.person.alias,
+                description: validated.description,
+                checkCommand: validated.checkCommand,
+                backoffSchedule: validated.backoff,
+              });
+              ctx.followUpScheduler.register(created);
+              log(`followup registered: "${validated.description}" (${validated.backoff.length} attempts)`);
+            }
+          }
         }
 
         // Log invocation to audit store

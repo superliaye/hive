@@ -6,6 +6,8 @@ import { PidFile } from '../orchestrator/pid-file.js';
 import { recoverStaleAgents, formatRecoveryAlert } from '../orchestrator/crash-recovery.js';
 import { parseOrgFlat } from '../org/parser.js';
 import { detectNewAgents } from './hot-reload.js';
+import { FollowUpStore } from './followup-store.js';
+import { FollowUpScheduler } from './followup-scheduler.js';
 
 const CRASH_MAX_COUNT = 3;
 const CRASH_WINDOW_MS = 10 * 60 * 1000;
@@ -20,6 +22,8 @@ export class Daemon {
   private crashHistory = new Map<string, number[]>();
   /** Per-agent decay index for exponential backoff when messages found but no work needed */
   private decayIndex = new Map<string, number>();
+  private followUpStore: FollowUpStore | undefined;
+  private followUpScheduler: FollowUpScheduler | undefined;
 
   constructor(config: DaemonConfig) {
     this.config = config;
@@ -53,6 +57,18 @@ export class Daemon {
       }
     }
 
+    // Initialize follow-up tracker
+    const pathMod = await import('path');
+    this.followUpStore = new FollowUpStore(pathMod.join(this.config.dataDir, 'orchestrator.db'));
+    this.followUpScheduler = new FollowUpScheduler({
+      store: this.followUpStore,
+      lanes: this.lanes,
+      stateStore: this.config.state,
+      audit: this.config.audit,
+      getAgent: (agentId) => this.config.orgChart.agents.get(agentId),
+    });
+    this.followUpScheduler.start();
+
     // Index agent memories in background (non-blocking)
     this.config.memory.indexAll(this.config.orgChart.agents, msg => console.log(`[daemon] ${msg}`))
       .then(() => console.log('[daemon] memory indexing complete'))
@@ -71,6 +87,10 @@ export class Daemon {
 
   async stop(): Promise<void> {
     this.running = false;
+
+    // Stop follow-up scheduler
+    this.followUpScheduler?.stop();
+    this.followUpStore?.close();
 
     // Clear all timers
     for (const timer of this.tickTimers.values()) {
@@ -242,6 +262,8 @@ export class Daemon {
       memoryReindex: async (agentId, agentDir) => {
         await this.config.memory.indexAgent(agentId, agentDir);
       },
+      followUpStore: this.followUpStore,
+      followUpScheduler: this.followUpScheduler,
     };
 
     const result = await checkWork(ctx);
