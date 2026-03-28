@@ -3,23 +3,28 @@ import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { ConversationMessage } from './ConversationMessage';
 import { EmptyState } from '../shared';
-import type { Message } from '../../types';
+import type { Message, MessagesResponse } from '../../types';
 
 export function ConversationFeed({ conversation }: { conversation: string }) {
-  const { data: messages, setData } = useApi<Message[]>(`/api/conversations/${conversation}/messages?limit=50`);
+  const { data: messagesData, setData } = useApi<MessagesResponse>(`/api/conversations/${conversation}/messages?limit=50`);
+  const messages = messagesData?.messages;
 
   useSSEEvent('new-message', useCallback((event: any) => {
     if (event.conversation === conversation) {
       setData(prev => {
-        const exists = prev?.some(m => m.id === event.id);
+        const msgs = prev?.messages ?? [];
+        const exists = msgs.some(m => m.id === event.id);
         if (exists) return prev;
-        return [...(prev ?? []), {
-          id: event.id,
-          sender: event.sender,
-          content: event.content,
-          timestamp: event.timestamp,
-          conversation: event.conversation,
-        }];
+        return {
+          messages: [...msgs, {
+            id: event.id,
+            sender: event.sender,
+            content: event.content,
+            timestamp: event.timestamp,
+            conversation: event.conversation,
+          }],
+          total: (prev?.total ?? 0) + 1,
+        };
       });
     }
   }, [conversation, setData]));

@@ -2,26 +2,31 @@ import { useState, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
 import { DashboardCard, timeAgo } from '../shared';
-import type { Message, OrgMeta } from '../../types';
+import type { MessagesResponse, OrgMeta } from '../../types';
 
 export function RecentChatCard() {
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
   const conversation = meta?.rootConversation;
-  const { data: messages, setData } = useApi<Message[]>(
+  const { data: messagesData, setData } = useApi<MessagesResponse>(
     conversation ? `/api/conversations/${conversation}/messages?limit=5` : null,
   );
+  const messages = messagesData?.messages;
+  const totalMessages = messagesData?.total ?? 0;
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
 
   useSSEEvent('new-message', useCallback((event: any) => {
     if (conversation && event.conversation === conversation) {
-      setData(prev => [...(prev ?? []).slice(-4), {
-        id: event.id,
-        sender: event.sender,
-        content: event.content,
-        timestamp: event.timestamp,
-        conversation: event.conversation,
-      }]);
+      setData(prev => ({
+        messages: [...(prev?.messages ?? []).slice(-4), {
+          id: event.id,
+          sender: event.sender,
+          content: event.content,
+          timestamp: event.timestamp,
+          conversation: event.conversation,
+        }],
+        total: (prev?.total ?? 0) + 1,
+      }));
     }
   }, [conversation, setData]));
 
@@ -44,7 +49,7 @@ export function RecentChatCard() {
 
   return (
     <DashboardCard title={`${rootName} Chat`} icon={'\u25C9'} linkTo="/chat">
-      <div className="space-y-2 mb-3">
+      <div className="space-y-2 mb-2">
         {messages && messages.length > 0 ? (
           messages.slice(-3).map(m => (
             <div key={m.id} className="text-xs">
@@ -57,6 +62,14 @@ export function RecentChatCard() {
           <p className="text-xs text-slate-500">No messages yet</p>
         )}
       </div>
+      {totalMessages > 3 && (
+        <div className="flex items-center justify-between mb-3 text-xs">
+          <span className="text-slate-500">Showing 3 of {totalMessages} messages</span>
+          <a href="/chat" onClick={(e) => e.stopPropagation()} className="text-amber-500 hover:text-amber-400 transition-colors">
+            View all →
+          </a>
+        </div>
+      )}
       <div className="flex gap-2" onClick={(e) => e.preventDefault()}>
         <input
           type="text"

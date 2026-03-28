@@ -49,6 +49,11 @@ export interface Message {
   mentions?: string[];
 }
 
+export interface MessagesResponse {
+  messages: Message[];
+  total: number;
+}
+
 export interface Invocation {
   id: string;
   agentId: string;

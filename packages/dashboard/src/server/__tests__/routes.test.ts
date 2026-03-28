@@ -126,12 +126,15 @@ describe('Dashboard API routes', () => {
     expect(Array.isArray(body)).toBe(true);
   });
 
-  it('GET /api/conversations/:id/messages returns messages array', async () => {
+  it('GET /api/conversations/:id/messages returns messages object with total', async () => {
     const conversationIds = ctx.access.getAccessibleConversations(0);
     const conversationId = conversationIds[0] ?? 'dm:0:1';
     const { status, body } = await request(`/api/conversations/${conversationId}/messages`);
     expect(status).toBe(200);
-    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveProperty('messages');
+    expect(body).toHaveProperty('total');
+    expect(Array.isArray(body.messages)).toBe(true);
+    expect(typeof body.total).toBe('number');
   });
 
   it('GET /api/audit returns invocations array', async () => {
