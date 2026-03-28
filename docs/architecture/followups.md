@@ -13,7 +13,7 @@ Two event streams drive agent work:
 Emitted by agents at the end of their response, before the ACTION tag:
 
 ```
-FOLLOWUP: Bug #47 verification — Tess reviewing PR
+FOLLOWUP: Bug #47 verification — QA reviewing PR
 | check: gh pr view 47 --json state -q '.state'
 | backoff: 10m, 30m, 1h
 ```
@@ -63,7 +63,7 @@ When spawned for a followup, the agent receives:
 
 ```
 # Follow-Up Check (attempt 2 of 3)
-**Description:** Bug #47 verification — Tess reviewing PR
+**Description:** Bug #47 verification — QA reviewing PR
 **Check result** (exit 1): open
 **Previous check output:** open
 **Backoff remaining:** 1h

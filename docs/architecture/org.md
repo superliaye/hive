@@ -7,7 +7,7 @@ Agents live in flat folders under `org/`:
 ```
 org/
 ├── PROTOCOLS.md              # Shared org-wide rules (all agents see this)
-├── 1-hiro/                   # {personId}-{alias}/
+├── 1-ceo/                    # {personId}-{alias}/
 │   ├── IDENTITY.md           # Frontmatter metadata + prose intro
 │   ├── SOUL.md               # Personality, values, behavioral guidelines
 │   ├── BUREAU.md             # Org position context (auto-generated)
@@ -20,12 +20,12 @@ org/
 │   │   └── delegation/SKILL.md
 │   └── .claude/skills/       # Skills loaded by Claude CLI
 │       └── delegation/SKILL.md
-├── 3-maya/
-├── 4-sam/
+├── 2-eng-mgr/
+├── 3-dev/
 └── ...
 ```
 
-Folder naming convention: `{id}-{alias}` (e.g., `1-hiro`, `10-platform-eng`).
+Folder naming convention: `{id}-{alias}` (e.g., `1-ceo`, `3-dev`).
 
 ## People Table (hive.db)
 
@@ -52,8 +52,8 @@ Person ID 0 is reserved for the super-user (human operator).
 ```yaml
 ---
 id: 4
-alias: sam
-name: Sam
+alias: alice
+name: Alice
 role: Engineering Manager
 roleTemplate: manager
 model: claude-opus-4-6
@@ -61,7 +61,7 @@ emoji: 🔧
 vibe: pragmatic, detail-oriented
 skills: [hive-comms, git-workflow, delegation]
 ---
-Sam is the engineering manager for the frontend team...
+Alice is the engineering manager for the frontend team...
 ```
 
 **SOUL.md** — Behavioral guidelines, delegation rules, org boundaries.
@@ -92,7 +92,7 @@ role-templates/
 
 ## Provisioning Flow
 
-`hive agent create --alias rio --name Rio --template swe --reports-to sam`
+`hive agent create --alias bob --name Bob --template swe --reports-to alice`
 
 1. Validate alias uniqueness, template exists, manager exists
 2. Assign next person ID from DB
