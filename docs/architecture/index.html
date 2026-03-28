@@ -141,30 +141,35 @@ graph LR
     FTIMER -->|"due"| CW
   end
 
-  subgraph agent ["Agent Process ×N (stateless, isolated)"]
+  subgraph bundle ["Context Bundle ×N (per agent on disk)"]
     direction TB
-    PROMPT["System Prompt"] --- ID["IDENTITY.md"]
-    PROMPT --- SOUL["SOUL.md"]
-    PROMPT --- SKILLS["Skills/*.md"]
-    PROMPT --- MEMFILE["MEMORY.md<br/>(agent-managed)"]
-    PROMPT --- TLOG["triage-log/<br/>(last N days, daemon-written)"]
-    PROMPT --- PRIO["PRIORITIES.md"]
+    ID["IDENTITY.md"]
+    SOUL["SOUL.md"]
+    SKILLS["Skills/*.md"]
+    PRIO["PRIORITIES.md"]
+    MEMFILE["MEMORY.md<br/>(agent-managed)"]
+    ROUTINE["ROUTINE.md"]
+    TLOG["triage-log/<br/>(daemon-written)"]
   end
+
+  AGENT["Agent Process ×N<br/>(stateless Claude CLI)"]
 
   DASH -->|"POST /api/chat"| CHAT[(Chat DB)]
   CHAT -->|"signal / tick"| CW
-  ILOG -->|"append"| TLOGSTORE[("triage-log/<br/>per agent")]
-  TLOGSTORE -.->|"last N days"| TLOG
+  ILOG -->|"append"| TLOG
   S2 -->|"log"| AUDIT[("Audit Store")]
   FCHECK -->|"log each"| AUDIT
   PARSE -->|"ACTION tag"| AUDIT
 
-  SPAWN -.->|"spawnClaude()"| PROMPT
-  agent -.->|"hive chat send<br/>(side effect)"| CHAT
+  SPAWN -->|"assemble prompt<br/>from bundle"| bundle
+  bundle -->|"system prompt"| AGENT
+  AGENT -->|"stdout JSON"| SPAWN
+  AGENT -->|"hive chat send"| CHAT
+  AGENT -->|"updates"| MEMFILE
   CW -.->|"events"| DASH
 
   style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
-  style agent fill:transparent,stroke:#3fb950,stroke-width:2px
+  style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
 </div>
 
 <h3>Module Map</h3>
@@ -823,8 +828,9 @@ function addStackedCards() {
   // Target the first mermaid diagram only (system overview)
   const firstSvg = document.querySelector('.mermaid svg');
   if (!firstSvg) return;
-  const stackedNodeIds = ['CW', 'MEM', 'AGENT'];
-  stackedNodeIds.forEach(id => {
+  // Stacked cards for multi-instance nodes (blue border)
+  const blueStacked = ['CW'];
+  blueStacked.forEach(id => {
     const node = firstSvg.querySelector(`[id^="flowchart-${id}-"]`);
     if (!node) return;
     const rect = node.querySelector('rect.basic');
@@ -832,8 +838,6 @@ function addStackedCards() {
     const parent = rect.parentNode;
     const x = parseFloat(rect.getAttribute('x') || 0);
     const y = parseFloat(rect.getAttribute('y') || 0);
-    // Create 2 offset clones behind the original for a "stack" look
-    // i=1 is the nearest shadow, i=2 is furthest back
     for (let i = 2; i >= 1; i--) {
       const clone = rect.cloneNode(true);
       clone.setAttribute('x', x + i * 5);
@@ -843,6 +847,26 @@ function addStackedCards() {
       clone.style.stroke = '#58a6ff';
       clone.style.strokeWidth = '1px';
       parent.insertBefore(clone, rect);
+    }
+  });
+  // Stacked cards for Agent Process (standalone node)
+  const agentNode = firstSvg.querySelector(`[id^="flowchart-AGENT-"]`);
+  if (agentNode) {
+    const rect = agentNode.querySelector('rect.basic');
+    if (rect) {
+      const parent = rect.parentNode;
+      const x = parseFloat(rect.getAttribute('x') || 0);
+      const y = parseFloat(rect.getAttribute('y') || 0);
+      for (let i = 2; i >= 1; i--) {
+        const clone = rect.cloneNode(true);
+        clone.setAttribute('x', x + i * 5);
+        clone.setAttribute('y', y + i * 5);
+        clone.style.opacity = i === 2 ? '0.35' : '0.6';
+        clone.style.fill = '#161b22';
+        clone.style.stroke = '#3fb950';
+        clone.style.strokeWidth = '1px';
+        parent.insertBefore(clone, rect);
+      }
     }
   });
 }
