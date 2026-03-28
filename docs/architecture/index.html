@@ -104,22 +104,41 @@
 
 <div class="mermaid">
 graph TB
-  U["Super-User<br/>(dashboard / CLI)"]
-  U -->|"hive chat send"| CHAT[(Chat DB)]
-  AGENTS["Agent Subprocesses"] -->|"hive chat send"| CHAT
-  CHAT -->|"signal / tick"| DAEMON["Daemon"]
-  DAEMON --> LANE["Lane Manager<br/>(1 lane per agent)"]
-  LANE --> S1["Stage 1<br/>Deterministic Score"]
-  S1 --> S2["Stage 2<br/>LLM Triage (haiku)"]
-  S2 -->|"ACT_NOW"| S3["Stage 3<br/>Spawn Claude CLI"]
-  S2 -->|"NOTE / QUEUE"| MEM["Memory File"]
-  S2 -->|"IGNORE"| MARK["Mark Read"]
-  S3 --> AGENTS
-  S3 -->|"FOLLOWUP tags"| FUP["Followup Scheduler"]
-  S3 --> AUDIT["Audit Store"]
-  FUP -->|"backoff checks"| S3
-  DASH["Dashboard"] -->|"SSE"| U
+  subgraph ui [" "]
+    direction TB
+    U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
+    DASH -->|"SSE events"| U
+  end
+
+  subgraph core [" "]
+    direction TB
+    CHAT[(Chat DB)] -->|"signal / tick"| DAEMON["Daemon"]
+    DAEMON --> LANE["Lane Manager<br/>(1 lane per agent)"]
+    LANE --> S1["Stage 1: Score"]
+    S1 --> S2["Stage 2: Triage<br/>(haiku)"]
+    S2 -->|"NOTE/QUEUE"| MEM["Memory File"]
+    S2 -->|"IGNORE"| MARK["Mark Read"]
+    S2 -->|"ACT_NOW"| S3["Stage 3: Spawn<br/>Claude CLI"]
+  end
+
+  subgraph outputs [" "]
+    direction TB
+    AGENTS["Agent<br/>Subprocesses"]
+    FUP["Followup<br/>Scheduler"]
+    AUDIT["Audit Store"]
+  end
+
+  DASH -->|"POST /api/chat"| CHAT
   DAEMON -->|"events"| DASH
+  S3 --> AGENTS
+  S3 --> FUP
+  S3 --> AUDIT
+  AGENTS -->|"hive chat send"| CHAT
+  FUP -->|"backoff"| S3
+
+  style ui fill:transparent,stroke:#30363d
+  style core fill:transparent,stroke:#30363d
+  style outputs fill:transparent,stroke:#30363d
 </div>
 
 <h3>Module Map</h3>
