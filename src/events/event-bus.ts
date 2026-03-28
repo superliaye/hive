@@ -24,8 +24,12 @@ export interface AuditInvocationEvent {
   model: string;
   tokensIn?: number;
   tokensOut?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   durationMs?: number;
   channel?: string;
+  inputSummary?: string;
+  outputSummary?: string;
 }
 
 export interface HiveEventMap {

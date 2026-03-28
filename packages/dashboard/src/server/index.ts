@@ -164,8 +164,12 @@ function wireEventBus(ctx: HiveContext, bus: HiveEventBus, daemon: Daemon | null
       model: opts.model,
       tokensIn: opts.tokensIn,
       tokensOut: opts.tokensOut,
+      cacheReadTokens: opts.cacheReadTokens,
+      cacheCreationTokens: opts.cacheCreationTokens,
       durationMs: opts.durationMs,
       channel: opts.channel,
+      inputSummary: opts.inputSummary,
+      outputSummary: opts.outputSummary,
     });
     return id;
   };
