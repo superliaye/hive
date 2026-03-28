@@ -114,7 +114,9 @@ graph TB
     CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
     CW --> S1["Score<br/>(deterministic)"]
     S1 --> S2["Triage<br/>(haiku LLM)"]
+    S2 -->|"NOTE / QUEUE"| ROUTE["Process results"]
     S2 -->|"IGNORE"| MARK["Mark Read"]
+    ROUTE --> MARK
 
     CW -->|"check due<br/>followups"| FCHECK{"Run check<br/>commands"}
     FCHECK -->|"exit 0"| FCLOSE["Close followup"]
@@ -133,8 +135,7 @@ graph TB
   end
 
   CHAT -->|"signal / tick"| CW
-  S2 -->|"NOTE / QUEUE"| MEM["Memory File ×N"]
-  MEM --> MARK
+  ROUTE -->|"append"| MEM["Memory File ×N"]
   S2 -->|"log"| AUDIT[("Audit Store")]
   FCHECK -->|"log each"| AUDIT
   PARSE -->|"ACTION tag"| AUDIT
