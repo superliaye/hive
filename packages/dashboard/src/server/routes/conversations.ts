@@ -40,13 +40,16 @@ export function createConversationRoutes(ctx: HiveContext): Router {
       const limit = parseInt(req.query.limit as string) || 50;
       const history = ctx.messages.history(conversationId, { limit });
 
-      res.json(history.messages.map(m => ({
-        id: `${m.conversationId}:${m.seq}`,
-        conversation: m.conversationId,
-        sender: m.senderAlias,
-        content: m.content,
-        timestamp: m.timestamp,
-      })));
+      res.json({
+        messages: history.messages.map(m => ({
+          id: `${m.conversationId}:${m.seq}`,
+          conversation: m.conversationId,
+          sender: m.senderAlias,
+          content: m.content,
+          timestamp: m.timestamp,
+        })),
+        total: history.total,
+      });
     } catch (err: any) {
       console.error('[conversations/messages] Error:', err.message);
       res.status(500).json({ error: err.message });

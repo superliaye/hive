@@ -3,14 +3,15 @@ import { ChatFeed } from '../components/chat/ChatFeed';
 import { ChatInput } from '../components/chat/ChatInput';
 import { useApi } from '../hooks/useApi';
 import { useSSEEvent } from '../hooks/useSSE';
-import type { Message, OrgMeta } from '../types';
+import type { Message, MessagesResponse, OrgMeta } from '../types';
 
 export function ChatPage() {
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
   const conversation = meta?.rootConversation;
-  const { data: messages, setData } = useApi<Message[]>(
+  const { data: messagesData, setData } = useApi<MessagesResponse>(
     conversation ? `/api/conversations/${conversation}/messages?limit=100` : null,
   );
+  const messages = messagesData?.messages ?? null;
   const [rootWorking, setRootWorking] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -18,15 +19,19 @@ export function ChatPage() {
   useSSEEvent('new-message', useCallback((event: any) => {
     if (conversation && event.conversation === conversation) {
       setData(prev => {
-        const exists = prev?.some(m => m.id === event.id);
+        const msgs = prev?.messages ?? [];
+        const exists = msgs.some(m => m.id === event.id);
         if (exists) return prev;
-        return [...(prev ?? []), {
-          id: event.id,
-          sender: event.sender,
-          content: event.content,
-          timestamp: event.timestamp,
-          conversation: event.conversation,
-        }];
+        return {
+          messages: [...msgs, {
+            id: event.id,
+            sender: event.sender,
+            content: event.content,
+            timestamp: event.timestamp,
+            conversation: event.conversation,
+          }],
+          total: (prev?.total ?? 0) + 1,
+        };
       });
     }
   }, [conversation, setData]));

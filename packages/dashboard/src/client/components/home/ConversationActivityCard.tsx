@@ -23,7 +23,8 @@ export function ConversationActivityCard() {
       conversations.map(async (ch) => {
         try {
           const res = await fetch(`/api/conversations/${ch.name}/messages?limit=3`);
-          const msgs: Message[] = await res.json();
+          const data = await res.json();
+          const msgs: Message[] = data.messages;
           return { name: ch.name, displayName: ch.displayName, members: ch.members, recentMessages: msgs };
         } catch {
           return { name: ch.name, displayName: ch.displayName, members: ch.members, recentMessages: [] as Message[] };
