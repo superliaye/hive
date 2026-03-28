@@ -53,6 +53,7 @@ export class CursorStore {
 
   /** Advance read cursor for a person on a conversation. Never goes backwards. */
   ack(personId: number, conversationId: string, seq: number): void {
+    const prev = this.getCursor(personId, conversationId);
     this.db.raw().prepare(`
       INSERT INTO read_cursors (person_id, conversation_id, last_seq, updated_at)
       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -60,6 +61,13 @@ export class CursorStore {
         last_seq = MAX(last_seq, excluded.last_seq),
         updated_at = CURRENT_TIMESTAMP
     `).run(personId, conversationId, seq);
+    if (seq > prev) {
+      const maxSeq = this.db.raw().prepare(
+        'SELECT MAX(seq) as m FROM messages WHERE conversation_id = ?'
+      ).get(conversationId) as any;
+      const warn = seq > (maxSeq?.m ?? 0) ? ' ⚠ CURSOR AHEAD OF MAX SEQ' : '';
+      console.log(`[cursor] person=${personId} ${conversationId}: ${prev} → ${seq}${warn}`);
+    }
   }
 
   /** Get the current cursor position. Returns 0 if no cursor exists. */

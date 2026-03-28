@@ -1,6 +1,6 @@
 ---
 name: hive-comms
-description: Use when you need to send messages, reply to agents, check inbox, acknowledge messages, search conversation history, or manage group channels
+description: Use when you need to send messages, reply to agents, check inbox, search conversation history, or manage groups
 ---
 
 # Hive Communication
@@ -16,11 +16,6 @@ hive chat send #group-name "message" # Group
 **Check inbox:**
 ```bash
 hive chat inbox                      # Unread messages, grouped by channel
-```
-
-**Acknowledge (advance read cursor):**
-```bash
-hive chat ack @alias <seq>           # Mark messages through seq as read
 ```
 
 **View history:**

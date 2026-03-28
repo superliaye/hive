@@ -54,6 +54,7 @@ export async function spawnClaude(
     // Unset CLAUDECODE to allow spawning Claude CLI from within a Claude Code session
     const env = { ...process.env, ...opts.env };
     delete env.CLAUDECODE;
+    env.HIVE_DAEMON_SPAWN = '1';
 
     const proc = nodeSpawn('claude', args, {
       cwd: opts.cwd,
