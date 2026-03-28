@@ -62,10 +62,9 @@ export class Daemon {
     this.followUpStore = new FollowUpStore(pathMod.join(this.config.dataDir, 'orchestrator.db'));
     this.followUpScheduler = new FollowUpScheduler({
       store: this.followUpStore,
-      lanes: this.lanes,
-      stateStore: this.config.state,
-      audit: this.config.audit,
-      getAgent: (agentId) => this.config.orgChart.agents.get(agentId),
+      onFollowUpDue: (agentId: string, _followupId: number) => {
+        this.enqueueCheckWork(agentId);
+      },
     });
     this.followUpScheduler.start();
 
