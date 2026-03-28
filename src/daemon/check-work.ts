@@ -192,6 +192,7 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       agentDir: agent.dir,
       priorities: agent.files.priorities,
       bureau: agent.files.bureau,
+      timeoutMs: 120_000,
     });
 
     // Override: messages from super-user are ALWAYS ACT_NOW

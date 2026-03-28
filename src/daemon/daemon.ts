@@ -74,14 +74,21 @@ export class Daemon {
       .then(() => console.log('[daemon] memory indexing complete'))
       .catch(err => console.error('[daemon] memory indexing error:', err));
 
-    // Schedule periodic ticks per agent
+    // Schedule periodic ticks per agent, staggered to avoid thundering herd
     const tickMs = this.config.tickIntervalMs ?? 600_000;
-    for (const [id] of this.config.orgChart.agents) {
-      const timer = setInterval(() => {
+    const agentIds = [...this.config.orgChart.agents.keys()];
+    const staggerMs = Math.floor(tickMs / Math.max(agentIds.length, 1));
+    for (let i = 0; i < agentIds.length; i++) {
+      const id = agentIds[i];
+      setTimeout(() => {
         if (!this.running) return;
         this.enqueueCheckWork(id);
-      }, tickMs);
-      this.tickTimers.set(id, timer);
+        const timer = setInterval(() => {
+          if (!this.running) return;
+          this.enqueueCheckWork(id);
+        }, tickMs);
+        this.tickTimers.set(id, timer);
+      }, staggerMs * i);
     }
   }
 
