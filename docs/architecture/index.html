@@ -110,35 +110,28 @@ graph TB
     DASH -->|"SSE events"| U
   end
 
-  subgraph core [" "]
+  subgraph core ["per agent (×N)"]
     direction TB
-    CHAT[(Chat DB)] -->|"signal / tick"| DAEMON["Daemon"]
-    DAEMON --> LANE["Lane Manager<br/>(1 lane per agent)"]
-    LANE --> S1["Stage 1: Score"]
-    S1 --> S2["Stage 2: Triage<br/>(haiku)"]
-    S2 -->|"NOTE/QUEUE"| MEM["Memory File"]
+    CHAT[(Chat DB<br/>DMs + Groups)] -->|"signal / tick"| DAEMON["Daemon<br/>staggered ticks"]
+    DAEMON --> LANE["Agent Lane ×N<br/>(FIFO, concurrency=1)"]
+    LANE --> S1["Stage 1: Score<br/>(deterministic)"]
+    S1 --> S2["Stage 2: Triage<br/>(haiku LLM)"]
+    S2 -->|"NOTE/QUEUE"| MEM["Memory File<br/>(per agent)"]
     S2 -->|"IGNORE"| MARK["Mark Read"]
     S2 -->|"ACT_NOW"| S3["Stage 3: Spawn<br/>Claude CLI"]
   end
 
-  subgraph outputs [" "]
-    direction TB
-    AGENTS["Agent<br/>Subprocesses"]
-    FUP["Followup<br/>Scheduler"]
-    AUDIT["Audit Store"]
-  end
-
   DASH -->|"POST /api/chat"| CHAT
   DAEMON -->|"events"| DASH
-  S3 --> AGENTS
-  S3 --> FUP
-  S3 --> AUDIT
+  S3 --> AGENTS["Agent Process ×N<br/>(stateless, isolated)"]
+  S3 --> AUDIT["Audit Store"]
   AGENTS -->|"hive chat send"| CHAT
-  FUP -->|"backoff"| S3
+  AGENTS -->|"FOLLOWUP tags"| FUP["Followup Scheduler"]
+  FUP -->|"backoff checks"| S3
+  FUP --> AUDIT
 
   style ui fill:transparent,stroke:#30363d
   style core fill:transparent,stroke:#30363d
-  style outputs fill:transparent,stroke:#30363d
 </div>
 
 <h3>Module Map</h3>
