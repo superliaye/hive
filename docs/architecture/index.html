@@ -59,8 +59,15 @@
   .tag-note { background: #58a6ff22; color: var(--accent); border: 1px solid #58a6ff44; }
   .tag-ignore { background: #8b949e22; color: var(--muted); border: 1px solid #8b949e44; }
   .mermaid { margin: 12px 0; text-align: center; }
-  .mermaid-wide { margin: 24px -40px; text-align: center; }
-  @media (max-width: 800px) { .mermaid-wide { margin: 12px 0; } }
+  .mermaid-wide {
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    margin: 24px 0;
+    padding: 0 20px;
+  }
   .toc { columns: 2; column-gap: 24px; margin: 12px 0; }
   .toc a { display: block; padding: 3px 0; color: var(--muted); font-size: 13px; }
   .toc a:hover { color: var(--accent); }
