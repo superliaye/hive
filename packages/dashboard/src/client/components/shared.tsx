@@ -20,8 +20,8 @@ export function DashboardCard({ title, icon, linkTo, children }: {
       to={linkTo}
       className="block bg-slate-900 border border-slate-800 rounded-lg p-4 hover:border-slate-700 transition-colors"
     >
-      <h3 className="text-sm font-medium text-slate-400 mb-3">
-        <span className="mr-2">{icon}</span>{title}
+      <h3 className="text-sm font-medium text-slate-400 mb-3 flex items-center min-w-0">
+        <span className="mr-2 shrink-0">{icon}</span><span className="truncate">{title}</span>
       </h3>
       {children}
     </Link>
