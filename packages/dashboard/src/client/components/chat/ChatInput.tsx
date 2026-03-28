@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface ChatInputProps {
-  onSend: (text: string) => void;
+  onSend: (text: string) => Promise<boolean> | void;
   disabled: boolean;
   rootName?: string;
 }
@@ -14,13 +14,16 @@ export function ChatInput({ onSend, disabled, rootName = 'CEO' }: ChatInputProps
     inputRef.current?.focus();
   }, []);
 
+  const submit = async () => {
+    if (!text.trim() || disabled) return;
+    const result = await onSend(text.trim());
+    if (result !== false) setText('');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (text.trim() && !disabled) {
-        onSend(text.trim());
-        setText('');
-      }
+      submit();
     }
   };
 
@@ -37,7 +40,7 @@ export function ChatInput({ onSend, disabled, rootName = 'CEO' }: ChatInputProps
           className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:border-amber-500 transition-colors"
         />
         <button
-          onClick={() => { if (text.trim()) { onSend(text.trim()); setText(''); } }}
+          onClick={submit}
           disabled={disabled || !text.trim()}
           className="px-4 py-2.5 bg-amber-500 text-slate-950 text-sm rounded-lg font-medium disabled:opacity-50 hover:bg-amber-400 transition-colors shrink-0"
         >
