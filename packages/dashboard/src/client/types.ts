@@ -8,6 +8,7 @@ export interface Agent {
   lastHeartbeat?: string;
   lastInvocation?: string;
   currentTask?: string;
+  conversationCount?: number;
 }
 
 export interface OrgAgent {
