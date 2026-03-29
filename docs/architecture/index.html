@@ -279,13 +279,13 @@ graph LR
 
   AGENT["Agent Process"]
 
-  HIVE -->|"reads all →<br/>assembles prompt"| bundle
+  bundle -->|"reads all →<br/>assembles prompt"| HIVE
   HIVE -->|"writes triage"| B_TLOG
   HIVE -->|"writes activity"| B_MEMDIR
   HIVE -->|"writes events"| B_EVENTS
 
   AGENT -->|"modifies any file"| bundle
-  AGENT -->|"hive memory search"| B_MEMDB
+  B_MEMDB -->|"hive memory search"| AGENT
   AGENT -->|"writes notes"| B_MEMMD
 
   PROV["hive agent create"] -->|"creates from template"| bundle
