@@ -33,6 +33,7 @@ export function buildAgentGitEnv(alias: string, name: string): Record<string, st
     GIT_AUTHOR_EMAIL: `${alias}@hive.local`,
     GIT_COMMITTER_NAME: `${name} (hive/${alias})`,
     GIT_COMMITTER_EMAIL: `${alias}@hive.local`,
+    HIVE_AGENT_ID: alias,
   };
 }
 
