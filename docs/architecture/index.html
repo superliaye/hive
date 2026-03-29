@@ -266,9 +266,9 @@ graph TB
       B_SKILLS["Skills/*.md<br/>(loaded by Claude CLI)"]
     end
 
-    subgraph memory ["Agent Memory (agent-managed)"]
-      B_MEMMD["MEMORY.md<br/>(curated long-term notes)"]
-      B_MEMDIR["memory/<br/>(agent daily notes)"]
+    subgraph memory ["Agent Memory"]
+      B_MEMMD["MEMORY.md<br/>(agent-curated notes)"]
+      B_MEMDIR["memory/<br/>(activity logs, daemon-written)"]
       B_MEMDB[("memory.sqlite<br/>FTS5 + vec0 semantic search")]
     end
 
@@ -279,8 +279,9 @@ graph TB
   end
 
   HIVE["Hive Service"] -->|"reads all files →<br/>assembles system prompt"| bundle
-  HIVE -->|"writes triage<br/>classifications"| B_TLOG
-  HIVE -->|"writes system<br/>events"| B_EVENTS
+  HIVE -->|"writes triage"| B_TLOG
+  HIVE -->|"writes events"| B_EVENTS
+  HIVE -->|"writes activity logs"| B_MEMDIR
 
   AGENT["Agent Process"] -->|"modifies any file"| bundle
   AGENT -->|"hive memory search"| B_MEMDB
@@ -304,7 +305,7 @@ graph TB
 <p><strong>Who writes what:</strong></p>
 <ul>
   <li><strong>Agent</strong> writes MEMORY.md (curated notes), memory/ (daily notes), PRIORITIES.md (task status), BUREAU.md (org updates). Can modify any file.</li>
-  <li><strong>Hive Service</strong> writes triage-log.db (all triage classifications) and events.db (system events like ORG_CHANGE, SCHEDULED, WEBHOOK).</li>
+  <li><strong>Hive Service</strong> writes triage-log.db (all triage classifications), events.db (system events), and memory/ activity logs (brief summary after each agent invocation).</li>
   <li><strong>Provisioning</strong> (<code>hive agent create</code>) creates the initial bundle from a role template and writes the first ROLE_CREATED event.</li>
 </ul>
 <p><strong>Prompt assembly order:</strong> IDENTITY → SOUL → BUREAU → Protocols → Skills → PRIORITIES → ROUTINE → MEMORY → Triage Log → Events → ACTION instructions</p>
