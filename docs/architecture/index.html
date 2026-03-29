@@ -172,6 +172,21 @@ graph TB
   style agent fill:transparent,stroke:#bc8cff,stroke-width:2px
 </div>
 
+<h3>Simplified Overview</h3>
+<div class="mermaid">
+graph TB
+  U["Super-User"] -->|"message"| DASH["Dashboard Interface"]
+  DASH <-->|"REST + SSE"| HIVE["Hive Service"]
+  HIVE <-->|"read/write"| CHAT[(Chat DB)]
+  HIVE -->|"spawn"| AGENT["Agent Process ×N<br/>(LLM + CLI tools)"]
+  AGENT -->|"stdout"| HIVE
+  HIVE -->|"write"| BUNDLE["Context Bundle ×N<br/>(identity, config, memory,<br/>triage-log, events)"]
+  BUNDLE -->|"assemble prompt"| HIVE
+  AGENT -->|"read/write"| BUNDLE
+  AGENT -->|"chat send"| CHAT
+  HIVE -.->|"log"| AUDIT[("Audit Store")]
+</div>
+
 <h3>Module Map</h3>
 <div class="cols">
 <pre>src/
