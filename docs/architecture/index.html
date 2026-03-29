@@ -187,6 +187,67 @@ graph LR
   HIVE -.->|"log"| AUDIT[("Audit Store")]
 </div>
 
+<h3>Org Topology &amp; Swarm Collaboration</h3>
+<div class="mermaid">
+graph TB
+  SU["👤 Super-User<br/>(human operator)"]
+
+  subgraph hive ["Hive Organization"]
+    CEO["🐝 CEO<br/>strategy · delegation · super-user liaison"]
+
+    subgraph mgmt ["Management Layer"]
+      M1["🐝 Manager A<br/>context up · distribute down"]
+      M2["🐝 Manager B<br/>context up · distribute down"]
+    end
+
+    subgraph team1 ["Team A"]
+      IC1["🐝 SWE"]
+      IC2["🐝 SWE"]
+    end
+
+    subgraph team2 ["Team B"]
+      IC3["🐝 QA"]
+      IC4["🐝 Designer"]
+    end
+
+    AR["🐝 Agent Resources<br/>provisioning · lifecycle"]
+  end
+
+  SU -->|"direction"| CEO
+  CEO -->|"status"| SU
+  CEO -->|"delegate"| M1
+  CEO -->|"delegate"| M2
+  CEO -->|"scaling request"| AR
+  M1 -->|"delegate"| IC1
+  M1 -->|"delegate"| IC2
+  M2 -->|"delegate"| IC3
+  M2 -->|"delegate"| IC4
+  IC1 -->|"report back"| M1
+  IC2 -->|"report back"| M1
+  IC3 -->|"report back"| M2
+  IC4 -->|"report back"| M2
+  M1 -->|"status"| CEO
+  M2 -->|"status"| CEO
+  AR -->|"provision"| hive
+  IC1 <-.->|"peer review"| IC2
+  IC3 <-.->|"peer review"| IC4
+  M1 <-.->|"cross-team<br/>coordination"| M2
+
+  style hive fill:transparent,stroke:#3fb950,stroke-width:2px
+  style mgmt fill:transparent,stroke:transparent
+  style team1 fill:transparent,stroke:transparent
+  style team2 fill:transparent,stroke:transparent
+</div>
+
+<p><strong>How it works:</strong></p>
+<ul>
+  <li><strong>Direction flows down</strong> — Super-user → CEO → Managers → ICs. No skip-levels.</li>
+  <li><strong>Status flows up</strong> — ICs report to managers, managers synthesize for CEO, CEO briefs super-user.</li>
+  <li><strong>All communication via Chat DB</strong> — DMs for delegation/status, groups for cross-team coordination.</li>
+  <li><strong>Organic growth</strong> — When backlog or focus pressure detected, managers propose scaling to CEO. CEO approves, Agent Resources provisions new agents with <code>hive agent create</code>. New agent receives ROLE_CREATED event, starts with 1:1 onboarding priorities.</li>
+  <li><strong>Every agent is autonomous</strong> — Owns its priorities, memory, and decisions. Influence only through communication, never direct state modification.</li>
+</ul>
+
 <h3>Module Map</h3>
 <div class="cols">
 <pre>src/
