@@ -14,6 +14,7 @@ import type { FollowUpStore, FollowUp } from './followup-store.js';
 import type { FollowUpScheduler } from './followup-scheduler.js';
 import type { TriageLogStore } from './triage-log-store.js';
 import { execFile } from 'node:child_process';
+import fs from 'fs';
 import path from 'path';
 
 export interface CheckWorkContext {
@@ -511,6 +512,38 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
         }
 
         agentInvoked = true;
+
+        // Write activity log to memory/
+        try {
+          const memoryDir = path.join(agent.dir, 'memory');
+          if (!fs.existsSync(memoryDir)) {
+            fs.mkdirSync(memoryDir, { recursive: true });
+          }
+          const today = new Date().toISOString().slice(0, 10);
+          const logFile = path.join(memoryDir, `${today}.md`);
+
+          const triggerParts: string[] = [];
+          if (actNow.length > 0) {
+            const senders = [...new Set(ranked.filter(m => actNow.some(r => r.messageId === m.messageId)).map(m => m.sender))];
+            const convos = [...new Set(ranked.filter(m => actNow.some(r => r.messageId === m.messageId)).map(m => m.conversation))];
+            triggerParts.push(`${actNow.length} ACT_NOW from ${senders.map(s => '@' + s).join(', ')} in ${convos.map(c => '#' + c).join(', ')}`);
+          }
+          if (followupsNeedingSpawn.length > 0) {
+            triggerParts.push(`${followupsNeedingSpawn.length} followup(s): ${followupsNeedingSpawn.map(f => f.followup.description).join('; ')}`);
+          }
+
+          const entry = [
+            `\n## ${new Date().toISOString()}`,
+            `- **Triggered by:** ${triggerParts.join('; ')}`,
+            actionSummary ? `- **Action:** ${actionSummary}` : `- **Action:** ${responseText.slice(0, 150)}`,
+            followupsNeedingSpawn.length > 0 ? `- **Followups:** ${followupsNeedingSpawn.map(f => f.isFinal ? `${f.followup.description} (FINAL)` : `${f.followup.description} (rescheduled)`).join('; ')}` : null,
+          ].filter(Boolean).join('\n');
+
+          const existing = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf-8') : `# Activity Log — ${today}\n`;
+          fs.writeFileSync(logFile, existing + entry + '\n');
+        } catch (memErr) {
+          log(`activity log write failed (non-fatal): ${memErr instanceof Error ? memErr.message : String(memErr)}`);
+        }
       } catch (err) {
         log(`ERROR invoking agent: ${err instanceof Error ? err.message : String(err)}`);
         stateStore.updateStatus(agent.person.alias, 'idle');
