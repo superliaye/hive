@@ -34,10 +34,23 @@ export function ConversationViewPage() {
   // Determine the focused sender alias for right-aligning their messages
   const focusedSender = hasFocalAgent ? agentAlias : undefined;
 
-  // Build breadcrumb pieces
+  // Build display names for breadcrumb and title
   const conversationDisplayName = conversation
     ? formatConversationName(conversation.name, agentMap, conversation.members, conversation.displayName)
     : conversationId;
+
+  // For breadcrumb: show conversation partner name (not focal agent) for DMs
+  const breadcrumbLabel = useMemo(() => {
+    if (!conversation || !hasFocalAgent || conversation.type !== 'dm') return conversationDisplayName;
+    // Find the other party in this DM
+    const otherAlias = conversation.members.find(m => m !== agentAlias && m !== 'super-user');
+    if (otherAlias) {
+      const other = agentMap.get(otherAlias);
+      if (other) return `@${other.name}`;
+      return `@${otherAlias}`;
+    }
+    return conversationDisplayName;
+  }, [conversation, hasFocalAgent, agentAlias, agentMap, conversationDisplayName]);
 
   // Loading state — wait for agents and conversations to resolve
   if (!agents || !conversations) {
@@ -62,7 +75,7 @@ export function ConversationViewPage() {
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <p className="text-slate-400 text-sm">Conversation not found: <span className="text-slate-200 font-medium">{conversationId}</span></p>
         <Link
-          to={hasFocalAgent ? `/conversations` : '/conversations'}
+          to={hasFocalAgent ? `/conversations/${encodeURIComponent(agentAlias!)}` : '/conversations'}
           className="text-xs text-amber-500 hover:text-amber-400"
         >
           &larr; Back to Conversations
@@ -92,7 +105,7 @@ export function ConversationViewPage() {
             </>
           )}
           <span className="text-slate-600">/</span>
-          <span className="text-slate-400">{conversationDisplayName}</span>
+          <span className="text-slate-400">{breadcrumbLabel}</span>
         </nav>
 
         {/* Title row */}

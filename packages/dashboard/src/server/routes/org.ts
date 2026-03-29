@@ -68,11 +68,17 @@ export function createOrgRoutes(ctx: HiveContext): Router {
 export function createAgentRoutes(ctx: HiveContext): Router {
   const router = Router();
 
-  // GET /api/agents — all agent states
+  // GET /api/agents — all agent states (includes per-agent conversation counts via agent-scoped access)
   router.get('/', (_req, res) => {
     const states = ctx.state.listAll();
     const agents = Array.from(ctx.orgChart.agents.values()).map(a => {
       const state = states.find(s => s.agentId === a.person.alias);
+      // Use agent-scoped access to count conversations (matches Layer 2's endpoint)
+      let conversationCount = 0;
+      try {
+        const personId = ctx.chatAdapter.resolveAlias(a.person.alias);
+        conversationCount = ctx.access.getAccessibleConversations(personId).length;
+      } catch { /* agent not in chat system yet */ }
       return {
         id: a.person.alias,
         name: a.identity.name,
@@ -83,6 +89,7 @@ export function createAgentRoutes(ctx: HiveContext): Router {
         lastHeartbeat: state?.lastHeartbeat,
         lastInvocation: state?.lastInvocation,
         currentTask: state?.currentTask,
+        conversationCount,
       };
     });
     res.json(agents);
