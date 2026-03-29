@@ -367,6 +367,86 @@ graph LR
   <li><strong>Isolated</strong> — <code>HIVE_DAEMON_SPAWN=1</code> blocks cursor manipulation. Agent cannot interfere with other agents' state.</li>
 </ul>
 
+<h3>Hive Service Deep Dive</h3>
+<div class="mermaid-wide mermaid">
+graph TB
+  DASH["Dashboard<br/>(React SPA)"]
+  AGENT["Agent Process"]
+  CHAT[(Chat DB)]
+  AUDIT[("Audit Store")]
+  BUNDLE["Context Bundle"]
+
+  subgraph hive ["Hive Service (single Node.js process)"]
+    direction TB
+
+    subgraph express ["Express Server"]
+      API_CHAT["POST /api/chat"]
+      API_SIGNAL["POST /api/signal"]
+      API_REST["GET /api/org · agents · audit ·<br/>conversations · status"]
+      SSE["GET /api/events<br/>(SSE stream)"]
+    end
+
+    subgraph daemon ["Daemon (in-process)"]
+      EBUS["EventBus<br/>(in-memory)"]
+      TICK["Tick Scheduler<br/>(staggered per agent)"]
+      LANES["Lane Manager<br/>(1 FIFO lane per agent,<br/>concurrency = 1)"]
+      CW["checkWork()"]
+      SCORE["Score<br/>(deterministic)"]
+      TRIAGE["Triage<br/>(haiku LLM)"]
+      FCHECK{"Followup<br/>check cmds"}
+      SPAWN["Spawn<br/>Claude CLI"]
+      PARSE["Parse stdout<br/>(ACTION + FOLLOWUP)"]
+      FTIMER["Followup<br/>Timer"]
+      MARKREAD["Mark read<br/>→ idle"]
+    end
+
+    API_CHAT -->|"message"| EBUS
+    API_SIGNAL -->|"signal"| LANES
+    EBUS -->|"signal<br/>conversation"| LANES
+    SSE -.->|"subscribe"| EBUS
+
+    TICK -->|"periodic"| LANES
+    LANES --> CW
+    CW --> SCORE --> TRIAGE
+    CW -->|"due followups"| FCHECK
+    TRIAGE -->|"ACT_NOW"| SPAWN
+    FCHECK -->|"exit 1"| SPAWN
+    FCHECK -->|"exit 0/2"| MARKREAD
+    TRIAGE -->|"IGNORE"| MARKREAD
+    TRIAGE -->|"NOTE/QUEUE"| MARKREAD
+    SPAWN --> PARSE
+    PARSE --> MARKREAD
+    PARSE -->|"FOLLOWUP"| FTIMER
+    FTIMER -->|"due"| LANES
+  end
+
+  DASH <-->|"REST + SSE"| express
+  EBUS -->|"SSE events"| DASH
+  CHAT -->|"messages"| CW
+  SPAWN -->|"spawnClaude()"| AGENT
+  AGENT -->|"stdout"| PARSE
+  BUNDLE -->|"assemble prompt"| SPAWN
+  TRIAGE -.->|"log"| AUDIT
+  FCHECK -.->|"log"| AUDIT
+  PARSE -.->|"log"| AUDIT
+  TRIAGE -->|"write"| BUNDLE
+  CW -->|"write activity"| BUNDLE
+
+  style hive fill:transparent,stroke:#58a6ff,stroke-width:2px
+  style express fill:transparent,stroke:transparent
+  style daemon fill:transparent,stroke:transparent
+</div>
+
+<p><strong>Key internals:</strong></p>
+<ul>
+  <li><strong>Single process</strong> — Express server and Daemon run in the same Node.js process. Daemon starts in-process unless an external daemon is already running (PID file check).</li>
+  <li><strong>EventBus</strong> — in-memory EventEmitter (not a database). Store wrappers emit events on mutations: <code>message:new</code>, <code>agent:state</code>, <code>audit:invocation</code>. SSE manager subscribes and broadcasts to all connected dashboard clients.</li>
+  <li><strong>Lanes</strong> — per-agent FIFO queue with concurrency=1. Ensures no overlapping invocations for the same agent. Different agents run in parallel.</li>
+  <li><strong>Tick scheduler</strong> — every 10 minutes per agent, staggered to prevent thundering herd. Also triggered immediately by message signals (100ms debounce).</li>
+  <li><strong>checkWork</strong> — the sole entry point for all agent invocations. Scores → triages → processes followups → spawns agent if needed → parses response → marks read.</li>
+  <li><strong>Crash recovery</strong> — on startup, scans for agents stuck in 'working' with dead PIDs. 3+ crashes in 10 min → agent set to 'errored', skipped until manual intervention.</li>
+</ul>
+
 <h3>Module Map</h3>
 <div class="cols">
 <pre>src/
