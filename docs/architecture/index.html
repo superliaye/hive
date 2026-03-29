@@ -138,53 +138,31 @@
 <h2 id="overview">System Overview</h2>
 <div class="section">
 
-<div class="mermaid-wide mermaid">
-graph TB
-  U["Super-User"] -->|"message"| DASH["Dashboard Interface<br/>(React + SSE)"]
-  DASH <-->|"REST + SSE"| HIVE
-
-  HIVE["Hive Service<br/>(Express + Daemon)"] <-->|"read/write"| CHAT[(Chat DB)]
-  HIVE -->|"spawnClaude()"| AGENT_CORE
-  AGENT_CORE -->|"stdout JSON"| HIVE
-  HIVE -->|"write triage"| B_TLOG
-  HIVE -->|"write events"| B_EVENTS
-  HIVE -.->|"log"| AUDIT[("Audit Store")]
-
-  subgraph bundle ["Context Bundle ×N (per agent)"]
-    B_MEMMD["MEMORY.md<br/>(agent-managed)"] ~~~ B_MEMDIR["memory/"] ~~~ B_MEMDB[("memory.sqlite<br/>(FTS5 + vec0)")] ~~~ B_TLOG[("triage-log.db")] ~~~ B_EVENTS[("events.db 🔜")]
-    B_ID["IDENTITY.md"] ~~~ B_SOUL["SOUL.md"] ~~~ B_PRIO["PRIORITIES.md"] ~~~ B_ROUTINE["ROUTINE.md"] ~~~ B_SKILLS["Skills/*.md"]
-  end
-
-  subgraph agent ["Agent Process ×N (stateless Claude CLI)"]
-    AGENT_CORE["Claude CLI"]
-    TOOL_CHAT["hive chat<br/>send / inbox / search"]
-    TOOL_MEM["hive memory<br/>search"]
-    TOOL_GIT["git / gh"]
-    TOOL_PW["playwright"]
-  end
-
-  bundle -->|"assemble<br/>system prompt"| HIVE
-  AGENT_CORE -->|"modifies"| bundle
-  TOOL_CHAT -->|"send / search"| CHAT
-  TOOL_MEM -->|"semantic search"| B_MEMDB
-
-  style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
-  style agent fill:transparent,stroke:#bc8cff,stroke-width:2px
-</div>
-
-<h3>Simplified Overview</h3>
 <div class="mermaid-wide mermaid" id="simplified">
 graph LR
-  U["Super-User"] -->|"message"| DASH["Dashboard<br/>Interface"]
-  DASH <-->|"REST + SSE"| HIVE["Hive Service"]
-  HIVE <-->|"read/write"| CHAT[(Chat DB)]
-  HIVE -->|"spawn"| AGENT["Agent Process ×N<br/>(LLM + CLI tools)"]
-  AGENT -->|"stdout"| HIVE
-  HIVE -->|"write"| BUNDLE["Context Bundle ×N<br/>(identity, config, memory,<br/>triage-log, events)"]
+  U["👤 Super-User<br/><small>human operator</small>"]
+  DASH["🖥️ Dashboard<br/><small>React + SSE</small>"]
+  HIVE["⚡ Hive Service<br/><small>orchestration engine</small>"]
+  BUNDLE["📦 Context Bundle ×N<br/><small>identity · config · memory<br/>triage-log · events</small>"]
+  AGENT["🤖 Agent Process ×N<br/><small>stateless LLM + CLI tools</small>"]
+  CHAT[("💬 Chat DB<br/><small>shared messaging</small>")]
+
+  U -->|"message"| DASH
+  DASH <-->|"REST + SSE"| HIVE
+  HIVE <-->|"read/write"| CHAT
   BUNDLE -->|"assemble prompt"| HIVE
-  BUNDLE ---|"read/write"| AGENT
+  HIVE -->|"spawn"| AGENT
+  AGENT -->|"stdout"| HIVE
+  HIVE -->|"write"| BUNDLE
+  AGENT -->|"read/write"| BUNDLE
   AGENT -->|"chat send"| CHAT
-  HIVE -.->|"log"| AUDIT[("Audit Store")]
+
+  style HIVE fill:#58a6ff22,stroke:#58a6ff,stroke-width:2px,color:#e6edf3
+  style AGENT fill:#bc8cff22,stroke:#bc8cff,stroke-width:2px,color:#e6edf3
+  style BUNDLE fill:#3fb95022,stroke:#3fb950,stroke-width:2px,color:#e6edf3
+  style CHAT fill:#d2992222,stroke:#d29922,stroke-width:2px,color:#e6edf3
+  style DASH fill:#8b949e22,stroke:#8b949e,stroke-width:2px,color:#e6edf3
+  style U fill:#8b949e22,stroke:#8b949e,stroke-width:2px,color:#e6edf3
 </div>
 
 <h3>Org Topology &amp; Swarm Collaboration</h3>
