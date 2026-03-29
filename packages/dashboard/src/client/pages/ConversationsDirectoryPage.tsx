@@ -32,25 +32,18 @@ export function ConversationsDirectoryPage() {
     [agents]
   );
 
-  // Build per-agent stats: use server-provided conversationCount (agent-scoped) + last active from conversations
+  // Build per-agent stats: both conversationCount and lastActive come from server (agent-scoped)
   const agentStats = useMemo(() => {
     const stats = new Map<string, { conversationCount: number; lastActive: string | null }>();
     if (!agents) return stats;
     for (const agent of agents) {
-      // conversationCount comes from the server using agent-scoped access control
-      const conversationCount = agent.conversationCount ?? 0;
-      let lastActive: string | null = null;
-      if (conversations) {
-        for (const conv of conversations) {
-          if (!conv.members.includes(agent.id)) continue;
-          const ts = conv.lastMessage?.timestamp;
-          if (ts && (!lastActive || ts > lastActive)) lastActive = ts;
-        }
-      }
-      stats.set(agent.id, { conversationCount, lastActive });
+      stats.set(agent.id, {
+        conversationCount: agent.conversationCount ?? 0,
+        lastActive: agent.lastActive ?? null,
+      });
     }
     return stats;
-  }, [agents, conversations]);
+  }, [agents]);
 
   // Sort agents by most recently active
   const sortedAgents = useMemo(() => {
