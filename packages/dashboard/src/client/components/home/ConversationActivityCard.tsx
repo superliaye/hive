@@ -1,8 +1,9 @@
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo, formatConversationName } from '../shared';
+import { DashboardCard, timeAgo, parseUtcTimestamp, formatConversationName, senderName, stripMarkdown } from '../shared';
 import type { Conversation, Message, Agent } from '../../types';
 import { useEffect, useState, useCallback } from 'react';
+
 
 interface ConversationPreview {
   name: string;
@@ -12,9 +13,10 @@ interface ConversationPreview {
 }
 
 export function ConversationActivityCard() {
-  const { data: conversations } = useApi<Conversation[]>('/api/conversations');
+  const { data: conversations, loading: conversationsLoading } = useApi<Conversation[]>('/api/conversations');
   const { data: agents } = useApi<Agent[]>('/api/agents');
   const [previews, setPreviews] = useState<ConversationPreview[]>([]);
+  const [previewsLoaded, setPreviewsLoaded] = useState(false);
   const agentMap = new Map(agents?.map(a => [a.id, a]) ?? []);
 
   useEffect(() => {
@@ -38,9 +40,10 @@ export function ConversationActivityCard() {
         if (!aLast && !bLast) return 0;
         if (!aLast) return 1;
         if (!bLast) return -1;
-        return new Date(bLast.timestamp).getTime() - new Date(aLast.timestamp).getTime();
+        return parseUtcTimestamp(bLast.timestamp) - parseUtcTimestamp(aLast.timestamp);
       });
       setPreviews(sorted.slice(0, 5));
+      setPreviewsLoaded(true);
     });
   }, [conversations]);
 
@@ -56,7 +59,9 @@ export function ConversationActivityCard() {
 
   return (
     <DashboardCard title="Conversation Activity" icon={'\u25A3'} linkTo="/conversations">
-      {previews.length > 0 ? (
+      {!previewsLoaded || conversationsLoading ? (
+        <p className="text-xs text-slate-500">Loading conversations...</p>
+      ) : previews.length > 0 ? (
         <div className="space-y-3">
           {previews.map(p => {
             const lastMsg = p.recentMessages[p.recentMessages.length - 1];
@@ -72,7 +77,7 @@ export function ConversationActivityCard() {
                   <div className="mt-1 space-y-0.5">
                     {p.recentMessages.map(m => (
                       <p key={m.id} className="text-slate-400 truncate">
-                        <span className="text-slate-500">{m.sender}:</span> {m.content.slice(0, 60)}
+                        <span className="text-slate-500">{senderName(m.sender, agentMap)}:</span> {stripMarkdown(m.content).slice(0, 60)}
                       </p>
                     ))}
                   </div>

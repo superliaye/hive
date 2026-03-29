@@ -37,11 +37,19 @@ export function StatusDot({ status }: { status: string }) {
   return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />;
 }
 
+/**
+ * Convert a UTC timestamp string to a human-readable relative time.
+ * Handles multiple formats from our backends:
+ *  - SQLite CURRENT_TIMESTAMP: "YYYY-MM-DD HH:MM:SS" (no T, no Z)
+ *  - SQLite strftime:          "YYYY-MM-DDTHH:MM:SS.fff" (T but no Z)
+ *  - Full ISO 8601:            "YYYY-MM-DDTHH:MM:SS.fffZ"
+ * All timestamps without a timezone indicator are treated as UTC (per CLAUDE.md convention).
+ */
 export function timeAgo(dateStr: string | undefined): string {
   if (!dateStr) return 'never';
-  // Handle SQLite datetime format "YYYY-MM-DD HH:MM:SS" (no T, no Z — treat as UTC)
   let normalized = dateStr;
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(normalized)) {
+  // If no timezone indicator (Z or +/-offset), treat as UTC by appending Z
+  if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}/.test(normalized) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
     normalized = normalized.replace(' ', 'T') + 'Z';
   }
   const ts = new Date(normalized).getTime();
@@ -54,6 +62,41 @@ export function timeAgo(dateStr: string | undefined): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+/** Parse a UTC timestamp that may lack Z suffix, for comparison/sorting. */
+export function parseUtcTimestamp(dateStr: string): number {
+  let normalized = dateStr;
+  if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}/.test(normalized) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+    normalized = normalized.replace(' ', 'T') + 'Z';
+  }
+  return new Date(normalized).getTime();
+}
+
+/** Resolve a sender alias (e.g. "hiro", "super-user") to a display name using the agent map. */
+export function senderName(alias: string, agentMap: Map<string, Agent>): string {
+  if (alias === 'super-user') return 'You';
+  const agent = agentMap.get(alias);
+  return agent?.name ?? alias;
+}
+
+/** Strip markdown syntax for a plain-text preview */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s+/g, '')           // headings
+    .replace(/\*\*(.+?)\*\*/g, '$1')     // bold
+    .replace(/\*(.+?)\*/g, '$1')         // italic
+    .replace(/__(.+?)__/g, '$1')         // bold alt
+    .replace(/_(.+?)_/g, '$1')           // italic alt
+    .replace(/~~(.+?)~~/g, '$1')         // strikethrough
+    .replace(/`(.+?)`/g, '$1')           // inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+    .replace(/^[-*+]\s+/gm, '')          // unordered list markers
+    .replace(/^\d+\.\s+/gm, '')          // ordered list markers
+    .replace(/^>\s+/gm, '')              // blockquotes
+    .replace(/\n{2,}/g, ' ')             // collapse multiple newlines
+    .replace(/\n/g, ' ')                 // single newlines to space
+    .trim();
 }
 
 /** Convert a conversation name to a human-readable display name using the agent map.

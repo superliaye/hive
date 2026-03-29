@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo } from '../shared';
+import { DashboardCard, timeAgo, senderName, stripMarkdown } from '../shared';
+import { useAgentMap } from '../../hooks/useAgentMap';
 import type { MessagesResponse, OrgMeta } from '../../types';
 
 export function RecentChatCard() {
+  const agentMap = useAgentMap();
   const { data: meta } = useApi<OrgMeta>('/api/org/meta');
   const conversation = meta?.rootConversation;
   const { data: messagesData, setData } = useApi<MessagesResponse>(
@@ -53,8 +55,8 @@ export function RecentChatCard() {
         {messages && messages.length > 0 ? (
           messages.slice(-3).map(m => (
             <div key={m.id} className="text-xs">
-              <span className="text-slate-400 font-medium">{m.sender}: </span>
-              <span className="text-slate-300 truncate">{m.content.slice(0, 80)}{m.content.length > 80 ? '...' : ''}</span>
+              <span className="text-slate-400 font-medium">{senderName(m.sender, agentMap)}: </span>
+              <span className="text-slate-300 truncate">{(() => { const plain = stripMarkdown(m.content); return plain.slice(0, 80) + (plain.length > 80 ? '...' : ''); })()}</span>
               <span className="text-slate-600 ml-1">{timeAgo(m.timestamp)}</span>
             </div>
           ))
