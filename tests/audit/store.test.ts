@@ -97,4 +97,93 @@ describe('AuditStore', () => {
     expect(totals.totalIn).toBe(1200);
     expect(totals.totalOut).toBe(600);
   });
+
+  it('stores full_input/full_output for checkWork invocations', () => {
+    const id = store.logInvocation({
+      agentId: 'ceo',
+      invocationType: 'checkWork',
+      model: 'sonnet',
+      fullInput: 'system prompt here\n---\nwork input here',
+      fullOutput: 'agent response here',
+    });
+
+    const detail = store.getInvocationDetail(id);
+    expect(detail).not.toBeNull();
+    expect(detail!.fullInput).toBe('system prompt here\n---\nwork input here');
+    expect(detail!.fullOutput).toBe('agent response here');
+  });
+
+  it('stores full_input/full_output for followup invocations', () => {
+    const id = store.logInvocation({
+      agentId: 'eng-1',
+      invocationType: 'followup',
+      model: 'sonnet',
+      fullInput: 'followup input',
+      fullOutput: 'followup output',
+    });
+
+    const detail = store.getInvocationDetail(id);
+    expect(detail).not.toBeNull();
+    expect(detail!.fullInput).toBe('followup input');
+    expect(detail!.fullOutput).toBe('followup output');
+  });
+
+  it('does NOT store full_input/full_output for triage invocations', () => {
+    const id = store.logInvocation({
+      agentId: 'ceo',
+      invocationType: 'triage',
+      model: 'haiku',
+      fullInput: 'should be ignored',
+      fullOutput: 'should be ignored',
+    });
+
+    const detail = store.getInvocationDetail(id);
+    expect(detail).not.toBeNull();
+    expect(detail!.fullInput).toBeNull();
+    expect(detail!.fullOutput).toBeNull();
+  });
+
+  it('returns null for getInvocationDetail with unknown id', () => {
+    const detail = store.getInvocationDetail('nonexistent-id');
+    expect(detail).toBeNull();
+  });
+
+  it('pruneOldFullText nullifies old entries', () => {
+    // Insert an entry with full text
+    const id = store.logInvocation({
+      agentId: 'ceo',
+      invocationType: 'checkWork',
+      model: 'sonnet',
+      fullInput: 'old input',
+      fullOutput: 'old output',
+    });
+
+    // Manually backdate the timestamp to >30 days ago
+    const db = (store as any).db;
+    db.prepare("UPDATE invocations SET timestamp = datetime('now', '-31 days') WHERE id = ?").run(id);
+
+    const pruned = store.pruneOldFullText();
+    expect(pruned).toBe(1);
+
+    const detail = store.getInvocationDetail(id);
+    expect(detail!.fullInput).toBeNull();
+    expect(detail!.fullOutput).toBeNull();
+  });
+
+  it('pruneOldFullText does not affect recent entries', () => {
+    const id = store.logInvocation({
+      agentId: 'ceo',
+      invocationType: 'checkWork',
+      model: 'sonnet',
+      fullInput: 'recent input',
+      fullOutput: 'recent output',
+    });
+
+    const pruned = store.pruneOldFullText();
+    expect(pruned).toBe(0);
+
+    const detail = store.getInvocationDetail(id);
+    expect(detail!.fullInput).toBe('recent input');
+    expect(detail!.fullOutput).toBe('recent output');
+  });
 });

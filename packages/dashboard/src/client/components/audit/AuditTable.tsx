@@ -9,6 +9,91 @@ function formatTokenTooltip(inv: Invocation): string {
   return parts.join(' | ');
 }
 
+function FullDetailPanel({ invocationId }: { invocationId: string }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [detail, setDetail] = useState<{ fullInput: string | null; fullOutput: string | null } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showInput, setShowInput] = useState(true);
+  const [showOutput, setShowOutput] = useState(true);
+
+  const fetchDetail = async () => {
+    if (state === 'loaded') {
+      // Toggle visibility — already fetched
+      setState('idle');
+      return;
+    }
+    setState('loading');
+    try {
+      const res = await fetch(`/api/audit/${invocationId}/detail`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Unknown error' }));
+        setError(body.error ?? `HTTP ${res.status}`);
+        setState('error');
+        return;
+      }
+      const data = await res.json();
+      setDetail(data);
+      setState('loaded');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-slate-700/50">
+      <button
+        onClick={fetchDetail}
+        className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+      >
+        {state === 'loading' ? 'Loading...' : state === 'loaded' ? 'Hide full detail' : 'View full input/output'}
+      </button>
+
+      {state === 'error' && (
+        <p className="text-xs text-red-400 mt-1">{error}</p>
+      )}
+
+      {state === 'loaded' && detail && (
+        <div className="mt-2 space-y-2">
+          {detail.fullInput && (
+            <div>
+              <button
+                onClick={() => setShowInput(!showInput)}
+                className="text-xs text-amber-500 hover:text-amber-400 font-medium"
+              >
+                {showInput ? '▼' : '▶'} Full Input
+              </button>
+              {showInput && (
+                <pre className="mt-1 p-3 bg-slate-950 border border-slate-700 rounded text-xs text-slate-300 overflow-auto max-h-96 whitespace-pre-wrap font-mono">
+                  {detail.fullInput}
+                </pre>
+              )}
+            </div>
+          )}
+          {detail.fullOutput && (
+            <div>
+              <button
+                onClick={() => setShowOutput(!showOutput)}
+                className="text-xs text-amber-500 hover:text-amber-400 font-medium"
+              >
+                {showOutput ? '▼' : '▶'} Full Output
+              </button>
+              {showOutput && (
+                <pre className="mt-1 p-3 bg-slate-950 border border-slate-700 rounded text-xs text-slate-300 overflow-auto max-h-96 whitespace-pre-wrap font-mono">
+                  {detail.fullOutput}
+                </pre>
+              )}
+            </div>
+          )}
+          {!detail.fullInput && !detail.fullOutput && (
+            <p className="text-xs text-slate-500 mt-1">No full detail available (pruned or not recorded).</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AuditTable({ invocations }: { invocations: Invocation[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -97,6 +182,7 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
                         <span className="text-slate-500">Model: </span>
                         <span className="text-slate-300">{inv.model}</span>
                       </div>
+                      <FullDetailPanel invocationId={inv.id} />
                     </div>
                   </td>
                 </tr>

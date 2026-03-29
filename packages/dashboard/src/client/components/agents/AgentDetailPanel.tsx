@@ -173,7 +173,68 @@ function FilesTab({ agent }: { agent: AgentDetail }) {
   );
 }
 
+function AuditDetailInline({ invocationId }: { invocationId: string }) {
+  const [state, setState] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+  const [detail, setDetail] = useState<{ fullInput: string | null; fullOutput: string | null } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDetail = async () => {
+    if (state === 'loaded') { setState('idle'); return; }
+    setState('loading');
+    try {
+      const res = await fetch(`/api/audit/${invocationId}/detail`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: 'Unknown error' }));
+        setError(body.error ?? `HTTP ${res.status}`);
+        setState('error');
+        return;
+      }
+      setDetail(await res.json());
+      setState('loaded');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+      setState('error');
+    }
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        onClick={fetchDetail}
+        className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+      >
+        {state === 'loading' ? '...' : state === 'loaded' ? 'Hide' : 'Full detail'}
+      </button>
+      {state === 'error' && <p className="text-[10px] text-red-400 mt-1">{error}</p>}
+      {state === 'loaded' && detail && (
+        <div className="mt-1 space-y-1">
+          {detail.fullInput && (
+            <pre className="p-2 bg-slate-950 border border-slate-700 rounded text-[10px] text-slate-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
+              {detail.fullInput}
+            </pre>
+          )}
+          {detail.fullOutput && (
+            <pre className="p-2 bg-slate-950 border border-slate-700 rounded text-[10px] text-slate-300 overflow-auto max-h-48 whitespace-pre-wrap font-mono">
+              {detail.fullOutput}
+            </pre>
+          )}
+          {!detail.fullInput && !detail.fullOutput && (
+            <p className="text-[10px] text-slate-500">No detail available.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AuditTab({ agent }: { agent: AgentDetail }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Filter to checkWork/followup invocations that may have full detail
+  const spawnInvocations = agent.recentInvocations.filter(
+    inv => inv.invocationType === 'checkWork' || inv.invocationType === 'followup'
+  );
+
   return (
     <div>
       {agent.recentInvocations.length > 0 ? (
@@ -187,14 +248,34 @@ function AuditTab({ agent }: { agent: AgentDetail }) {
             </tr>
           </thead>
           <tbody>
-            {agent.recentInvocations.map(inv => (
-              <tr key={inv.id} className="border-b border-slate-800/50 text-slate-400">
-                <td className="py-1 pr-2 font-mono">{inv.invocationType}</td>
-                <td className="py-1 pr-2">{inv.model}</td>
-                <td className="py-1 pr-2">{(inv.tokensIn ?? 0) + (inv.tokensOut ?? 0)}</td>
-                <td className="py-1">{inv.durationMs ? `${(inv.durationMs / 1000).toFixed(1)}s` : '-'}</td>
-              </tr>
-            ))}
+            {agent.recentInvocations.map(inv => {
+              const isSpawn = inv.invocationType === 'checkWork' || inv.invocationType === 'followup';
+              const isExpanded = expandedId === inv.id;
+              return (
+                <>
+                  <tr
+                    key={inv.id}
+                    onClick={() => isSpawn && setExpandedId(isExpanded ? null : inv.id)}
+                    className={`border-b border-slate-800/50 text-slate-400 ${isSpawn ? 'cursor-pointer hover:bg-slate-800/30' : ''} transition-colors`}
+                  >
+                    <td className="py-1 pr-2 font-mono">{inv.invocationType}</td>
+                    <td className="py-1 pr-2">{inv.model}</td>
+                    <td className="py-1 pr-2">{(inv.tokensIn ?? 0) + (inv.tokensOut ?? 0)}</td>
+                    <td className="py-1">{inv.durationMs ? `${(inv.durationMs / 1000).toFixed(1)}s` : '-'}</td>
+                  </tr>
+                  {isExpanded && (
+                    <tr key={`${inv.id}-detail`}>
+                      <td colSpan={4} className="py-1 px-1 bg-slate-800/20">
+                        {inv.actionSummary && (
+                          <p className="text-[10px] text-slate-300 mb-1">{inv.actionSummary}</p>
+                        )}
+                        <AuditDetailInline invocationId={inv.id} />
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
           </tbody>
         </table>
       ) : (

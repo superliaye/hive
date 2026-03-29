@@ -26,6 +26,7 @@ export class Daemon {
   private followUpStore: FollowUpStore | undefined;
   private followUpScheduler: FollowUpScheduler | undefined;
   private triageLogStores = new Map<string, TriageLogStore>();
+  private auditCleanupTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(config: DaemonConfig) {
     this.config = config;
@@ -75,6 +76,16 @@ export class Daemon {
     });
     this.followUpScheduler.start();
 
+    // Prune old full_input/full_output from audit store (>30 days)
+    const pruned = this.config.audit.pruneOldFullText();
+    if (pruned > 0) console.log(`[daemon] pruned full text from ${pruned} old audit entries`);
+
+    // Schedule daily audit cleanup (every 24 hours)
+    this.auditCleanupTimer = setInterval(() => {
+      const n = this.config.audit.pruneOldFullText();
+      if (n > 0) console.log(`[daemon] daily cleanup: pruned full text from ${n} audit entries`);
+    }, 24 * 60 * 60 * 1000);
+
     // Index agent memories in background (non-blocking)
     this.config.memory.indexAll(this.config.orgChart.agents, msg => console.log(`[daemon] ${msg}`))
       .then(() => console.log('[daemon] memory indexing complete'))
@@ -110,6 +121,12 @@ export class Daemon {
       store.close();
     }
     this.triageLogStores.clear();
+
+    // Clear audit cleanup timer
+    if (this.auditCleanupTimer) {
+      clearInterval(this.auditCleanupTimer);
+      this.auditCleanupTimer = undefined;
+    }
 
     // Clear all timers
     for (const timer of this.tickTimers.values()) {
