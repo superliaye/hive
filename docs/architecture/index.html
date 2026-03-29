@@ -144,40 +144,41 @@ graph TB
   DASH <-->|"REST + SSE"| HIVE
 
   HIVE["Hive Service<br/>(Express + Daemon)"] <-->|"read/write"| CHAT[(Chat DB)]
-  HIVE -->|"spawnClaude()"| AGENT
-  AGENT -->|"stdout JSON"| HIVE
+  HIVE -->|"spawnClaude()"| AGENT_CORE
+  AGENT_CORE -->|"stdout JSON"| HIVE
   HIVE -->|"write triage"| B_TLOG
   HIVE -->|"write events"| B_EVENTS
   HIVE -.->|"log"| AUDIT[("Audit Store")]
 
   subgraph bundle ["Context Bundle ×N (per agent)"]
-    direction LR
-    subgraph files [" "]
-      B_ID["IDENTITY.md"]
-      B_SOUL["SOUL.md"]
-      B_PRIO["PRIORITIES.md"]
-      B_ROUTINE["ROUTINE.md"]
-      B_SKILLS["Skills/*.md"]
-    end
-    subgraph agentdata [" "]
-      B_MEM["MEMORY.md +<br/>memory.sqlite"]
-    end
-    subgraph daemondata [" "]
-      B_TLOG[("triage-log.db")]
-      B_EVENTS[("agent.db<br/>Event DB 🔜")]
-    end
+    B_ID["IDENTITY.md"]
+    B_SOUL["SOUL.md"]
+    B_PRIO["PRIORITIES.md"]
+    B_ROUTINE["ROUTINE.md"]
+    B_SKILLS["Skills/*.md"]
+    B_MEMMD["MEMORY.md<br/>(agent-managed)"]
+    B_MEMDIR["memory/<br/>(daily logs)"]
+    B_MEMDB[("memory.sqlite<br/>(FTS5 + vec0)")]
+    B_TLOG[("triage-log.db")]
+    B_EVENTS[("agent.db<br/>Event DB 🔜")]
   end
 
-  AGENT["Agent Process ×N<br/>(stateless Claude CLI)"]
+  subgraph agent ["Agent Process ×N (stateless Claude CLI)"]
+    AGENT_CORE["Claude CLI"]
+    TOOL_CHAT["hive chat<br/>send / inbox / search"]
+    TOOL_MEM["hive memory<br/>search"]
+    TOOL_GIT["git / gh"]
+    TOOL_PW["playwright"]
+  end
 
   bundle -->|"assemble<br/>system prompt"| HIVE
-  AGENT -->|"hive chat send"| CHAT
-  AGENT -->|"modifies"| bundle
+  AGENT_CORE -->|"modifies"| bundle
+  TOOL_CHAT -->|"send / search"| CHAT
+  TOOL_MEM -->|"semantic search"| B_MEMDB
+  HIVE -->|"index"| B_MEMDB
 
   style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
-  style files fill:transparent,stroke:transparent
-  style agentdata fill:transparent,stroke:transparent
-  style daemondata fill:transparent,stroke:transparent
+  style agent fill:transparent,stroke:#bc8cff,stroke-width:2px
 </div>
 
 <h3>Module Map</h3>
