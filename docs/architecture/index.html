@@ -335,20 +335,15 @@ graph LR
       T_FS["file system"]
     end
 
-    subgraph response ["Response (stdout JSON)"]
-      R_ACTION["ACTION: tag<br/>(required)"]
-      R_FOLLOWUP["FOLLOWUP: tag<br/>(optional)"]
-    end
-
-    AGENT_CORE --> response
+    STDOUT["stdout JSON<br/>(contains ACTION + FOLLOWUP<br/>tags as plain text)"]
+    AGENT_CORE --> STDOUT
   end
 
   HIVE -->|"spawnClaude()"| AGENT_CORE
   BUNDLE -->|"assemble prompt"| SYSPROMPT
   HIVE -->|"work input"| WORKINPUT
 
-  R_ACTION -->|"stdout JSON"| HIVE
-  R_FOLLOWUP -->|"stdout JSON"| HIVE
+  STDOUT -->|"daemon reads stdout,<br/>regex-parses tags"| HIVE
 
   T_CHAT -->|"send / search"| CHAT[(Chat DB)]
   MEMDB[("memory.sqlite")] -->|"search results"| T_MEM
