@@ -25,7 +25,9 @@ function seedPeople(db: ChatDb) {
  */
 async function runCli(deps: ChatCliDeps, args: string[], agentId: string = '1'): Promise<string> {
   const oldEnv = process.env.HIVE_AGENT_ID;
+  const oldDaemonSpawn = process.env.HIVE_DAEMON_SPAWN;
   process.env.HIVE_AGENT_ID = agentId;
+  delete process.env.HIVE_DAEMON_SPAWN;
 
   const program = new Command();
   program.exitOverride();
@@ -45,6 +47,8 @@ async function runCli(deps: ChatCliDeps, args: string[], agentId: string = '1'):
   } finally {
     process.stdout.write = origWrite;
     process.env.HIVE_AGENT_ID = oldEnv;
+    if (oldDaemonSpawn !== undefined) process.env.HIVE_DAEMON_SPAWN = oldDaemonSpawn;
+    else delete process.env.HIVE_DAEMON_SPAWN;
   }
 }
 

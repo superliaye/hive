@@ -120,10 +120,26 @@ describe('Dashboard API routes', () => {
     expect(body.error).toBe('Agent not found');
   });
 
-  it('GET /api/conversations returns conversation list', async () => {
+  it('GET /api/conversations returns conversation list with type field', async () => {
+    // Ensure at least one DM exists
+    const ceoId = ctx.chatAdapter.resolveAlias('ceo');
+    ctx.conversations.ensureDm(0, ceoId);
+
     const { status, body } = await request('/api/conversations');
     expect(status).toBe(200);
     expect(Array.isArray(body)).toBe(true);
+    expect(body.length).toBeGreaterThan(0);
+    // Every conversation should have a type field
+    for (const conv of body) {
+      expect(conv).toHaveProperty('type');
+      expect(['dm', 'group']).toContain(conv.type);
+      expect(conv).toHaveProperty('members');
+      expect(conv).toHaveProperty('messageCount');
+    }
+    // The DM we created should be typed 'dm'
+    const dmConv = body.find((c: any) => c.name.startsWith('dm:'));
+    expect(dmConv).toBeDefined();
+    expect(dmConv.type).toBe('dm');
   });
 
   it('GET /api/conversations/:id/messages returns messages object with total', async () => {
