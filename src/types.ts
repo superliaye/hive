@@ -48,7 +48,7 @@ export interface OrgChart {
 export interface AuditEntry {
   id: string;
   agentId: string;                   // alias from people table
-  invocationType: 'triage' | 'main' | 'memory' | 'proposal' | 'checkWork';
+  invocationType: 'checkWork' | 'followup' | 'triage' | 'followup-check';
   model: string;
   tokensIn?: number;
   tokensOut?: number;
