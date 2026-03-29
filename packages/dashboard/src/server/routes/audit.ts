@@ -33,5 +33,19 @@ export function createAuditRoutes(ctx: HiveContext): Router {
     res.json(totals);
   });
 
+  // GET /api/audit/:id/detail — full input/output for a single invocation
+  router.get('/:id/detail', (req, res) => {
+    const detail = ctx.audit.getInvocationDetail(req.params.id);
+    if (!detail) {
+      res.status(404).json({ error: 'Invocation not found' });
+      return;
+    }
+    if (detail.fullInput === null && detail.fullOutput === null) {
+      res.status(404).json({ error: 'Detail has been pruned or was not recorded' });
+      return;
+    }
+    res.json({ fullInput: detail.fullInput, fullOutput: detail.fullOutput });
+  });
+
   return router;
 }

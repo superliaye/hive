@@ -310,6 +310,41 @@ describe('checkWork', () => {
     );
   });
 
+  it('passes full_input and full_output to audit store for checkWork invocations', async () => {
+    const unread = [
+      { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date() },
+    ];
+
+    mockRankMessages.mockReturnValue([
+      { messageId: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date(), score: 9.0 },
+    ]);
+    mockTriageMessages.mockResolvedValue({
+      results: [{ messageId: 'msg-1', classification: 'ACT_NOW', reasoning: 'Urgent', score: 9.0 }],
+      tokensIn: 100, tokensOut: 50, durationMs: 200, model: 'haiku',
+    });
+    mockSpawnClaude.mockResolvedValue({
+      stdout: JSON.stringify({ result: 'All systems nominal.' }),
+      stderr: '',
+      exitCode: 0,
+      durationMs: 2000,
+      tokensIn: 800,
+      tokensOut: 200,
+    });
+
+    const ctx = makeCtx({ getUnread: vi.fn(async () => unread) });
+    stateStore.register('ceo');
+
+    await checkWork(ctx);
+
+    expect(mockAudit.logInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invocationType: 'checkWork',
+        fullInput: expect.stringContaining('Messages Requiring Action'),
+        fullOutput: 'All systems nominal.',
+      })
+    );
+  });
+
   it('passes cache token counts through to audit store', async () => {
     const unread = [
       { id: 'msg-1', conversation: 'dm:ceo', sender: 'super-user', content: 'status?', timestamp: new Date() },

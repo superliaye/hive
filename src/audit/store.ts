@@ -14,6 +14,8 @@ export interface LogInvocationOpts {
   outputSummary?: string;
   actionSummary?: string;
   channel?: string;
+  fullInput?: string;
+  fullOutput?: string;
 }
 
 export interface InvocationRow {
@@ -87,6 +89,8 @@ export class AuditStore {
       'ALTER TABLE invocations ADD COLUMN action_summary TEXT',
       'ALTER TABLE invocations ADD COLUMN cache_read_tokens INTEGER',
       'ALTER TABLE invocations ADD COLUMN cache_creation_tokens INTEGER',
+      'ALTER TABLE invocations ADD COLUMN full_input TEXT',
+      'ALTER TABLE invocations ADD COLUMN full_output TEXT',
     ];
     for (const sql of alterColumns) {
       try { this.db.exec(sql); } catch { /* Column already exists */ }
@@ -95,15 +99,19 @@ export class AuditStore {
 
   logInvocation(opts: LogInvocationOpts): string {
     const id = randomUUID();
+    // Only store full_input/full_output for agent spawn invocations (checkWork, followup)
+    const storeFullText = opts.invocationType === 'checkWork' || opts.invocationType === 'followup';
     this.db.prepare(`
-      INSERT INTO invocations (id, agent_id, invocation_type, model, tokens_in, tokens_out, cache_read_tokens, cache_creation_tokens, duration_ms, input_summary, output_summary, action_summary, channel)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO invocations (id, agent_id, invocation_type, model, tokens_in, tokens_out, cache_read_tokens, cache_creation_tokens, duration_ms, input_summary, output_summary, action_summary, channel, full_input, full_output)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, opts.agentId, opts.invocationType, opts.model,
       opts.tokensIn ?? null, opts.tokensOut ?? null,
       opts.cacheReadTokens ?? null, opts.cacheCreationTokens ?? null,
       opts.durationMs ?? null,
       opts.inputSummary ?? null, opts.outputSummary ?? null, opts.actionSummary ?? null, opts.channel ?? null,
+      storeFullText ? (opts.fullInput ?? null) : null,
+      storeFullText ? (opts.fullOutput ?? null) : null,
     );
     return id;
   }
@@ -157,6 +165,27 @@ export class AuditStore {
       result[row.agent_id] = { totalIn: row.total_in, totalOut: row.total_out };
     }
     return result;
+  }
+
+  getInvocationDetail(id: string): { fullInput: string | null; fullOutput: string | null } | null {
+    const row = this.db.prepare(
+      'SELECT full_input, full_output FROM invocations WHERE id = ?'
+    ).get(id) as { full_input: string | null; full_output: string | null } | undefined;
+    if (!row) return null;
+    return { fullInput: row.full_input, fullOutput: row.full_output };
+  }
+
+  /**
+   * Nullify full_input/full_output for invocations older than 30 days.
+   * Returns the number of rows pruned.
+   */
+  pruneOldFullText(): number {
+    const result = this.db.prepare(`
+      UPDATE invocations SET full_input = NULL, full_output = NULL
+      WHERE timestamp < datetime('now', '-30 days')
+      AND (full_input IS NOT NULL OR full_output IS NOT NULL)
+    `).run();
+    return result.changes;
   }
 
   close(): void {

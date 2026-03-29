@@ -485,6 +485,8 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
           outputSummary: responseText.slice(0, 200),
           actionSummary,
           channel: actNowConversations[0],
+          fullInput: systemPrompt + '\n\n---\n\n' + workInput,
+          fullOutput: responseText,
         });
 
         // Fallback (option 4): if agent didn't include ACTION: tag, use haiku to summarize
