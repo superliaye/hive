@@ -460,7 +460,7 @@ graph TB
 <div class="invariant"><strong>4.</strong> Super-user messages always ACT_NOW &mdash; bypass triage classification</div>
 <div class="invariant"><strong>5.</strong> Agents never call <code>ack</code> &mdash; daemon owns cursor management (<code>HIVE_DAEMON_SPAWN=1</code>)</div>
 <div class="invariant"><strong>6.</strong> Staggered ticks &mdash; prevents thundering herd of concurrent API calls</div>
-<div class="invariant"><strong>7.</strong> Memory written before read &mdash; NOTE/QUEUE saved to disk before marking read</div>
+<div class="invariant"><strong>7.</strong> Triage logged before read &mdash; NOTE/QUEUE saved to triage-log.db before marking read</div>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -498,8 +498,10 @@ graph TD
 ├── PRIORITIES.md     # Current focus areas
 ├── ROUTINE.md        # Scheduled behaviors
 ├── MEMORY.md         # Curated long-term notes (agent-editable)
-├── memory/           # Daily logs (auto-appended by daemon)
+├── memory/           # Activity logs (daemon-written after agent invocations)
 │   └── YYYY-MM-DD.md
+├── triage-log.db     # Per-agent SQLite: triage classifications
+├── events.db         # Per-agent SQLite: system events (planned)
 ├── role-skills/      # Skills from role template
 └── .claude/skills/   # Skills loaded by Claude CLI</pre>
 
@@ -559,9 +561,9 @@ graph TD
 graph LR
   A["IDENTITY.md"] --> B["SOUL.md"] --> C["BUREAU.md"] --> D["PROTOCOLS.md"]
   D --> E["Skills/*.md"] --> F["PRIORITIES.md"] --> G["ROUTINE.md"]
-  G --> H["MEMORY.md + logs"] --> I["ACTION_TAG_INSTRUCTION"]
+  G --> H["MEMORY.md + memory/*.md"] --> H2["Triage Log<br/>(last 20 from triage-log.db)"] --> H3["Events"] --> I["ACTION_TAG_INSTRUCTION"]
 </div>
-<p>Empty sections are filtered out. MEMORY includes last 3 days of daily logs.</p>
+<p>Empty sections are filtered out. MEMORY is MEMORY.md + memory/*.md (agent notes). Triage log is separate (last 20 entries from triage-log.db). Events injected from events.db.</p>
 
 <h3>Required Response Tags</h3>
 <h4>ACTION (mandatory)</h4>
@@ -693,14 +695,19 @@ graph TB
   EMPTY -->|"no"| SCORE["Stage 1: Score"]
   SCORE --> TRIAGE["Stage 2: Triage (haiku, 5min timeout)"]
   TRIAGE --> CLASSIFY{"classification?"}
-  CLASSIFY -->|"NOTE/QUEUE"| MEMORY["Append to memory file"]
-  MEMORY --> MARKREAD["Mark read"]
+  CLASSIFY -->|"NOTE/QUEUE"| TRIAGELOG["Log to triage-log.db"]
+  TRIAGELOG --> MARKREAD["Mark read"]
   CLASSIFY -->|"IGNORE"| MARKREAD
-  CLASSIFY -->|"ACT_NOW"| WORKING["Set status=working"]
+  CLASSIFY -->|"ACT_NOW"| FUPS{"due followups?"}
+  FUPS -->|"yes"| FCHECK["Run followup check cmds"]
+  FCHECK -->|"exit 0/2"| FCLOSE["Close/skip followup"]
+  FCHECK -->|"exit 1"| WORKING["Set status=working"]
+  FUPS -->|"no"| WORKING
   WORKING --> PROMPT["Assemble prompt + memory search"]
   PROMPT --> SPAWN["Spawn Claude CLI"]
   SPAWN --> PARSE["Parse FOLLOWUP tags"]
-  PARSE --> AUDITLOG["Log to audit"]
+  PARSE --> ACTLOG["Write activity log to memory/"]
+  ACTLOG --> AUDITLOG["Log to audit (triage + invocation)"]
   AUDITLOG --> IDLE["Set status=idle"]
   IDLE --> RECHECK{"recheck?"}
   RECHECK -->|"yes"| CW
@@ -742,8 +749,8 @@ graph TB
 <table>
   <tr><th>Class</th><th>Trigger</th><th>Action</th></tr>
   <tr><td><span class="tag tag-act">ACT_NOW</span></td><td>Manager request, urgent, @mention with question</td><td>Spawn full agent</td></tr>
-  <tr><td><span class="tag tag-queue">QUEUE</span></td><td>New task, non-urgent request, FYI needing follow-up</td><td>Append to memory, mark read</td></tr>
-  <tr><td><span class="tag tag-note">NOTE</span></td><td>Announcements, status updates, useful context</td><td>Append to memory, mark read</td></tr>
+  <tr><td><span class="tag tag-queue">QUEUE</span></td><td>New task, non-urgent request, FYI needing follow-up</td><td>Log to triage-log.db, mark read</td></tr>
+  <tr><td><span class="tag tag-note">NOTE</span></td><td>Announcements, status updates, useful context</td><td>Log to triage-log.db, mark read</td></tr>
   <tr><td><span class="tag tag-ignore">IGNORE</span></td><td>Other teams, social chatter</td><td>Mark read, drop</td></tr>
 </table>
 <p><strong>Override</strong>: Super-user messages &rarr; always <span class="tag tag-act">ACT_NOW</span></p>
@@ -803,7 +810,7 @@ graph TB
   <li>Exit 2 &rarr; skip, advance to next interval</li>
   <li>Exit 1 or no command &rarr; spawn agent with followup context</li>
   <li>Final attempt: agent must resolve, escalate, or cancel</li>
-  <li>Busy agent guard: retry in 2 minutes without consuming attempt</li>
+  <li>Lane concurrency=1 prevents overlapping &mdash; checkWork won't run if agent is already working</li>
 </ol>
 
 <h3>Agent Context (on followup invocation)</h3>
@@ -930,8 +937,12 @@ graph LR
 </ul>
 
 <h3>Daily Log Format</h3>
-<pre>- [2026-03-28T19:30:00Z] @sender in conversation: message snippet...</pre>
-<p>Written during checkWork when messages classified as NOTE/QUEUE. Written <strong>before</strong> marking read (crash safety).</p>
+<h3>Activity Logs (memory/)</h3>
+<pre>- [2026-03-28T19:30:00Z] Invocation summary: brief description of what the agent did</pre>
+<p>Written by the daemon after each agent invocation. Contains a brief summary of the agent's work.</p>
+
+<h3>Triage Log (triage-log.db)</h3>
+<p>Per-agent SQLite database storing all triage classifications (NOTE, QUEUE, IGNORE, ACT_NOW). Previously this data was appended to memory files; now stored in structured form for querying. Last 20 entries are injected into the agent's prompt during assembly.</p>
 </div>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -945,6 +956,8 @@ graph LR
   HIVE["hive.db<br/>people, messages,<br/>conversations, cursors"] --- ORCH["orchestrator.db<br/>agent_state,<br/>followups"]
   ORCH --- AUDIT["audit.db<br/>invocations"]
   AUDIT --- MEM["memory/{id}.sqlite<br/>chunks, FTS5, vec0"]
+  MEM --- TLOG["org/{id}-{alias}/<br/>triage-log.db<br/>(per-agent triage)"]
+  TLOG --- EVDB["org/{id}-{alias}/<br/>events.db 🔜<br/>(per-agent events)"]
 </div>
 
 <h3>hive.db</h3>
@@ -970,6 +983,18 @@ graph LR
   <tr><td>invocations</td><td>id (uuid)</td><td>Agent invocation log: model, tokens, duration, summaries</td></tr>
 </table>
 
+<h3>triage-log.db (per-agent)</h3>
+<table>
+  <tr><th>Table</th><th>Key</th><th>Purpose</th></tr>
+  <tr><td>triage_log</td><td>id (int)</td><td>All triage classifications (NOTE, QUEUE, IGNORE, ACT_NOW) with message context</td></tr>
+</table>
+
+<h3>events.db (per-agent, planned)</h3>
+<table>
+  <tr><th>Table</th><th>Key</th><th>Purpose</th></tr>
+  <tr><td>events</td><td>id (int)</td><td>System events: ROLE_CREATED, org changes, lifecycle events</td></tr>
+</table>
+
 <h3>Invocation Types</h3>
 <table>
   <tr><th>Type</th><th>Trigger</th></tr>
@@ -977,6 +1002,8 @@ graph LR
   <tr><td>followup</td><td>Followup scheduler fires</td></tr>
   <tr><td>memory</td><td>Memory indexing</td></tr>
   <tr><td>proposal</td><td>Approval workflow</td></tr>
+  <tr><td>triage</td><td>Triage audit row (classification logged)</td></tr>
+  <tr><td>followup-check</td><td>Followup check command result</td></tr>
 </table>
 </div>
 
