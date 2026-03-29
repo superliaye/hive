@@ -9,6 +9,7 @@ export interface Agent {
   lastInvocation?: string;
   currentTask?: string;
   conversationCount?: number;
+  lastActive?: string | null;
 }
 
 export interface OrgAgent {
