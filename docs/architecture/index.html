@@ -167,29 +167,22 @@ graph TB
   end
 
   subgraph bundle ["Context Bundle ×N (per agent)"]
-    direction TB
-    IDENT["IDENTITY.md"]
-    SOUL["SOUL.md"]
-    SKILLS["Skills/*.md"]
-    PRIO["PRIORITIES.md"]
-    ROUTINE["ROUTINE.md"]
-    MEM_F["MEMORY.md<br/>(agent-managed)"]
-    TLOG_F["triage-log/<br/>(daemon-written)"]
+    BFILES["IDENTITY · SOUL · PRIORITIES · ROUTINE<br/>Skills/*.md · MEMORY.md · triage-log/"]
   end
 
   AGENT["Agent Process ×N<br/>(stateless Claude CLI)"]
 
   CHAT -->|"signal / tick"| CW
-  TLOG_W -->|"append"| TLOG_F
+  TLOG_W -->|"append"| bundle
   TRIAGE -->|"log"| AUDIT[("Audit Store")]
   FCHECK -->|"log"| AUDIT
   PARSE -->|"ACTION tag"| AUDIT
 
-  SPAWN -->|"assemble prompt"| bundle
-  bundle -->|"system prompt"| AGENT
+  bundle -->|"assemble prompt"| SPAWN
+  SPAWN -->|"spawnClaude()"| AGENT
   AGENT -->|"stdout JSON"| PARSE
   AGENT -.->|"hive chat send"| CHAT
-  AGENT -.->|"updates"| MEM_F
+  AGENT -.->|"modifies files"| bundle
   CW -.->|"events"| DASH
 
   style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
