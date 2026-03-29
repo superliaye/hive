@@ -164,7 +164,7 @@ graph TB
     REG --> FTIMER["Followup Timer"]
     FTIMER -->|"due"| CW
 
-    TRIAGE --> CURSORS["Advance cursors → idle"]
+    CW -->|"end"| CURSORS["Mark read → idle"]
   end
 
   subgraph bundle ["Context Bundle ×N (per agent)"]
