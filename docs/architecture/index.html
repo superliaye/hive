@@ -312,46 +312,48 @@ graph LR
 
 <h3>Agent Process Deep Dive</h3>
 <div class="mermaid-wide mermaid">
-graph TB
-  HIVE["Hive Service"] -->|"spawnClaude()"| AGENT_CORE
+graph LR
+  HIVE["Hive Service"]
+  BUNDLE["Context Bundle"]
 
   subgraph agent ["Agent Process ×N (stateless, isolated)"]
     direction TB
 
     subgraph llm ["LLM Core"]
+      SYSPROMPT["System Prompt"]
+      WORKINPUT["Work Input<br/>(messages + followup context)"]
       AGENT_CORE["Claude CLI<br/>(model per agent config)"]
-      SYSPROMPT["System Prompt<br/>(assembled from Context Bundle)"]
-      WORKINPUT["Work Input<br/>(ACT_NOW messages + followup context)"]
       SYSPROMPT --> AGENT_CORE
       WORKINPUT --> AGENT_CORE
     end
 
     subgraph tools ["Available CLI Tools"]
-      T_CHAT["hive chat<br/>send · inbox · ack · search · group"]
-      T_MEM["hive memory<br/>search · index · status"]
-      T_GIT["git · gh<br/>commit · PR · issues · branch"]
-      T_PW["playwright<br/>browser automation"]
-      T_FS["file system<br/>read · write · edit"]
+      T_CHAT["hive chat<br/>send · inbox · search"]
+      T_MEM["hive memory search"]
+      T_GIT["git · gh"]
+      T_PW["playwright"]
+      T_FS["file system"]
     end
 
     subgraph response ["Response (stdout JSON)"]
-      R_ACTION["ACTION: tag<br/>(required — what was done)"]
-      R_FOLLOWUP["FOLLOWUP: tag<br/>(optional — commitments to track)"]
-      R_TEXT["Response text<br/>(posted to conversations)"]
+      R_ACTION["ACTION: tag<br/>(required)"]
+      R_FOLLOWUP["FOLLOWUP: tag<br/>(optional)"]
     end
 
     AGENT_CORE --> response
   end
 
-  T_CHAT -->|"send / search"| CHAT[(Chat DB)]
-  T_MEM -->|"semantic search"| MEMDB[("memory.sqlite")]
-  T_GIT -->|"push / PR"| GH["GitHub"]
-  T_FS -->|"read / write"| BUNDLE["Context Bundle"]
-  BUNDLE -->|"assembled into"| SYSPROMPT
+  HIVE -->|"spawnClaude()"| AGENT_CORE
+  BUNDLE -->|"assemble prompt"| SYSPROMPT
+  HIVE -->|"work input"| WORKINPUT
 
-  response -->|"stdout JSON"| HIVE
-  HIVE -->|"parse"| R_ACTION
-  HIVE -->|"parse"| R_FOLLOWUP
+  R_ACTION -->|"stdout JSON"| HIVE
+  R_FOLLOWUP -->|"stdout JSON"| HIVE
+
+  T_CHAT -->|"send / search"| CHAT[(Chat DB)]
+  MEMDB[("memory.sqlite")] -->|"search results"| T_MEM
+  T_GIT -->|"push / PR"| GH["GitHub"]
+  T_FS -->|"read / write"| BUNDLE
 
   style agent fill:transparent,stroke:#bc8cff,stroke-width:2px
   style llm fill:transparent,stroke:transparent
@@ -365,7 +367,7 @@ graph TB
   <li><strong>System prompt</strong> assembled by Hive Service from Context Bundle files (IDENTITY → SOUL → BUREAU → Protocols → Skills → PRIORITIES → ROUTINE → MEMORY → Triage Log → Events).</li>
   <li><strong>Work input</strong> contains ACT_NOW messages and/or followup context (check results, attempt count, final flag).</li>
   <li><strong>Tools</strong> are standard CLIs available during execution. The agent can send messages, search memory, commit code, browse the web, and modify its own Context Bundle files.</li>
-  <li><strong>Response</strong> must include an <code>ACTION:</code> tag (audit trail). May include <code>FOLLOWUP:</code> tags for automatic tracking. Response text may be posted to conversations.</li>
+  <li><strong>Response</strong> must include an <code>ACTION:</code> tag (audit trail). May include <code>FOLLOWUP:</code> tags for automatic tracking. Hive Service parses these from stdout JSON.</li>
   <li><strong>Isolated</strong> — <code>HIVE_DAEMON_SPAWN=1</code> blocks cursor manipulation. Agent cannot interfere with other agents' state.</li>
 </ul>
 
