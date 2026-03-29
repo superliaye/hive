@@ -50,7 +50,7 @@ export function AuditSnapshotCard() {
                 <div key={inv.id} className="flex items-center gap-2 text-xs text-slate-400">
                   <span className="font-mono">{inv.agentId}</span>
                   <span className="text-slate-600">{inv.invocationType}</span>
-                  <span className="ml-auto text-slate-500">{inv.tokensIn ?? 0}+{inv.tokensOut ?? 0}</span>
+                  <span className="ml-auto text-slate-500 shrink-0">{formatTokens(inv.tokensIn ?? 0)} in / {formatTokens(inv.tokensOut ?? 0)} out</span>
                 </div>
               ))}
             </div>

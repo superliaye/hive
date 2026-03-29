@@ -1,6 +1,6 @@
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo, formatConversationName } from '../shared';
+import { DashboardCard, timeAgo, formatConversationName, senderName } from '../shared';
 import type { Conversation, Message, Agent } from '../../types';
 import { useEffect, useState, useCallback } from 'react';
 
@@ -38,7 +38,10 @@ export function ConversationActivityCard() {
         if (!aLast && !bLast) return 0;
         if (!aLast) return 1;
         if (!bLast) return -1;
-        return new Date(bLast.timestamp).getTime() - new Date(aLast.timestamp).getTime();
+        // Timestamps from API are ISO with Z, but guard against missing Z (SQLite convention)
+        const aTime = new Date(aLast.timestamp.endsWith('Z') ? aLast.timestamp : aLast.timestamp + 'Z').getTime();
+        const bTime = new Date(bLast.timestamp.endsWith('Z') ? bLast.timestamp : bLast.timestamp + 'Z').getTime();
+        return bTime - aTime;
       });
       setPreviews(sorted.slice(0, 5));
     });
@@ -72,7 +75,7 @@ export function ConversationActivityCard() {
                   <div className="mt-1 space-y-0.5">
                     {p.recentMessages.map(m => (
                       <p key={m.id} className="text-slate-400 truncate">
-                        <span className="text-slate-500">{m.sender}:</span> {m.content.slice(0, 60)}
+                        <span className="text-slate-500">{senderName(m.sender, agentMap)}:</span> {m.content.slice(0, 60)}
                       </p>
                     ))}
                   </div>
