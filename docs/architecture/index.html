@@ -248,6 +248,69 @@ graph TB
   <li><strong>Every agent is autonomous</strong> — Owns its priorities, memory, and decisions. Influence only through communication, never direct state modification.</li>
 </ul>
 
+<h3>Context Bundle Deep Dive</h3>
+<div class="mermaid">
+graph TB
+  subgraph bundle ["Context Bundle ×N (per agent, on disk)"]
+    direction TB
+
+    subgraph identity ["Agent Identity"]
+      B_ID["IDENTITY.md<br/>(name, role, model, skills)"]
+      B_SOUL["SOUL.md<br/>(personality, authority, values)"]
+      B_BUREAU["BUREAU.md<br/>(org position, collaborators)"]
+    end
+
+    subgraph config ["Agent Config"]
+      B_PRIO["PRIORITIES.md<br/>(ACTIVE / READY / BLOCKED / DONE)"]
+      B_ROUTINE["ROUTINE.md<br/>(scheduled behaviors)"]
+      B_SKILLS["Skills/*.md<br/>(loaded by Claude CLI)"]
+    end
+
+    subgraph memory ["Agent Memory (agent-managed)"]
+      B_MEMMD["MEMORY.md<br/>(curated long-term notes)"]
+      B_MEMDIR["memory/<br/>(daily notes)"]
+      B_MEMDB[("memory.sqlite<br/>FTS5 + vec0 semantic search")]
+    end
+
+    subgraph daemondata ["Daemon-Managed Data"]
+      B_TLOG[("triage-log.db<br/>all triage classifications")]
+      B_EVENTS[("events.db 🔜<br/>ORG_CHANGE, SCHEDULED,<br/>WEBHOOK, SYSTEM")]
+    end
+  end
+
+  HIVE["Hive Service"] -->|"reads all files →<br/>assembles system prompt"| bundle
+  HIVE -->|"writes triage<br/>classifications"| B_TLOG
+  HIVE -->|"writes system<br/>events"| B_EVENTS
+  HIVE -->|"reads last N<br/>triage entries →<br/>appends to prompt"| B_TLOG
+  HIVE -->|"reads active<br/>events → appends<br/>to prompt"| B_EVENTS
+
+  AGENT["Agent Process"] -->|"modifies any file<br/>(MEMORY, PRIORITIES,<br/>BUREAU, etc.)"| bundle
+  AGENT -->|"hive memory search"| B_MEMDB
+  AGENT -->|"writes curated notes"| B_MEMMD
+
+  PROV["hive agent create<br/>(provisioning)"] -->|"creates initial files<br/>from role template"| bundle
+  PROV -->|"ROLE_CREATED event"| B_EVENTS
+
+  style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
+  style identity fill:transparent,stroke:transparent
+  style config fill:transparent,stroke:transparent
+  style memory fill:transparent,stroke:transparent
+  style daemondata fill:transparent,stroke:transparent
+</div>
+
+<p><strong>Who reads what:</strong></p>
+<ul>
+  <li><strong>Hive Service</strong> reads the entire bundle to assemble the system prompt before spawning an agent. Also reads last N triage-log entries and all active events to inject into the prompt.</li>
+  <li><strong>Agent Process</strong> can read and modify any file in the bundle. Uses <code>hive memory search</code> for semantic search over memory.sqlite.</li>
+</ul>
+<p><strong>Who writes what:</strong></p>
+<ul>
+  <li><strong>Agent</strong> writes MEMORY.md (curated notes), memory/ (daily notes), PRIORITIES.md (task status), BUREAU.md (org updates). Can modify any file.</li>
+  <li><strong>Hive Service</strong> writes triage-log.db (all triage classifications) and events.db (system events like ORG_CHANGE, SCHEDULED, WEBHOOK).</li>
+  <li><strong>Provisioning</strong> (<code>hive agent create</code>) creates the initial bundle from a role template and writes the first ROLE_CREATED event.</li>
+</ul>
+<p><strong>Prompt assembly order:</strong> IDENTITY → SOUL → BUREAU → Protocols → Skills → PRIORITIES → ROUTINE → MEMORY → Triage Log → Events → ACTION instructions</p>
+
 <h3>Module Map</h3>
 <div class="cols">
 <pre>src/
