@@ -138,191 +138,63 @@
 <h2 id="overview">System Overview</h2>
 <div class="section">
 
-<svg viewBox="0 0 1200 560" xmlns="http://www.w3.org/2000/svg" style="width:100vw;position:relative;left:50%;transform:translateX(-50%);display:block;">
-  <defs>
-    <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--edge-color)"/></marker>
-    <marker id="ahm" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="var(--muted)"/></marker>
-  </defs>
-  <style>
-    .box{fill:var(--node-bg);stroke:var(--node-border);stroke-width:1.5;rx:6}
-    .grp{fill:none;stroke-width:2;rx:8;stroke-dasharray:6,3}
-    .db{fill:var(--node-bg);stroke:var(--node-border);stroke-width:1.5}
-    .t{fill:var(--node-text);font:12px/1 system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
-    .ts{fill:var(--node-text);font:10px/1 system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
-    .tt{font:bold 11px/1 system-ui,sans-serif;text-anchor:start}
-    .e{stroke:var(--edge-color);stroke-width:1.5;fill:none;marker-end:url(#ah)}
-    .em{stroke:var(--muted);stroke-width:1;fill:none;stroke-dasharray:4,3;marker-end:url(#ahm)}
-    .el{fill:var(--edge-label);font:9px/1 system-ui,sans-serif;text-anchor:middle;dominant-baseline:central}
-    .sk{fill:var(--node-bg);stroke:var(--node-border);stroke-width:1;rx:6;opacity:0.4}
-  </style>
+<div class="mermaid-wide mermaid">
+graph TB
+  U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
+  DASH -->|"SSE events"| U
+  DASH -->|"POST /api/chat"| CHAT[(Chat DB)]
 
-  <!-- ════ COL 1: User layer ════ -->
-  <rect class="box" x="10" y="30" width="110" height="32"/>
-  <text class="t" x="65" y="46">Super-User</text>
+  subgraph daemon ["Daemon (central orchestrator)"]
+    direction TB
+    CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
+    CW --> SCORE["Score (deterministic)"]
+    SCORE --> TRIAGE["Triage (haiku LLM)"]
+    TRIAGE -->|"IGNORE"| MARK["Mark Read"]
+    TRIAGE -->|"NOTE / QUEUE"| TLOG_W["Write triage-log"]
+    TRIAGE -->|"ACT_NOW"| SPAWN["Spawn Claude CLI<br/>(single entry point)"]
 
-  <rect class="box" x="10" y="90" width="110" height="40"/>
-  <text class="t" x="65" y="104">Dashboard</text>
-  <text class="ts" x="65" y="120">(React + SSE)</text>
+    CW -->|"due followups"| FCHECK{"Run check cmds"}
+    FCHECK -->|"exit 0"| FCLOSE["Close followup"]
+    FCHECK -->|"exit 2"| FRESCHED["Reschedule"]
+    FCHECK -->|"exit 1"| SPAWN
 
-  <line class="e" x1="65" y1="62" x2="65" y2="90"/>
+    SPAWN --> PARSE["Parse response"]
+    PARSE -->|"FOLLOWUP tags"| REG["Register followup"]
+    PARSE --> ADV["Advance cursors → idle"]
 
-  <ellipse class="db" cx="65" cy="175" rx="50" ry="18"/>
-  <text class="ts" x="65" y="175">Chat DB</text>
-  <line class="e" x1="65" y1="130" x2="65" y2="157"/>
-  <text class="el" x="45" y="145">POST</text>
+    REG --> FTIMER["Followup Timer"]
+    FTIMER -->|"due"| CW
+  end
 
-  <ellipse class="db" cx="65" cy="380" rx="50" ry="18"/>
-  <text class="ts" x="65" y="380">Audit Store</text>
+  subgraph bundle ["Context Bundle ×N (per agent)"]
+    direction TB
+    IDENT["IDENTITY.md"]
+    SOUL["SOUL.md"]
+    SKILLS["Skills/*.md"]
+    PRIO["PRIORITIES.md"]
+    ROUTINE["ROUTINE.md"]
+    MEM_F["MEMORY.md<br/>(agent-managed)"]
+    TLOG_F["triage-log/<br/>(daemon-written)"]
+  end
 
-  <!-- ════ COL 2: Daemon ════ -->
-  <rect class="grp" x="150" y="10" width="480" height="530" stroke="var(--accent)"/>
-  <text class="tt" x="162" y="28" fill="var(--accent)">Daemon</text>
+  AGENT["Agent Process ×N<br/>(stateless Claude CLI)"]
 
-  <!-- checkWork ×N -->
-  <rect class="sk" x="173" y="52" width="150" height="34"/>
-  <rect class="sk" x="169" y="48" width="150" height="34"/>
-  <rect class="box" x="165" y="44" width="150" height="34"/>
-  <text class="ts" x="240" y="55">checkWork() ×N</text>
-  <text class="ts" x="240" y="68">(1 lane per agent)</text>
+  CHAT -->|"signal / tick"| CW
+  TLOG_W -->|"append"| TLOG_F
+  TRIAGE -->|"log"| AUDIT[("Audit Store")]
+  FCHECK -->|"log"| AUDIT
+  PARSE -->|"ACTION tag"| AUDIT
 
-  <!-- Chat DB → checkWork -->
-  <line class="e" x1="115" y1="170" x2="165" y2="60"/>
-  <text class="el" x="130" y="110">signal/tick</text>
+  SPAWN -->|"assemble prompt"| bundle
+  bundle -->|"system prompt"| AGENT
+  AGENT -->|"stdout JSON"| PARSE
+  AGENT -.->|"hive chat send"| CHAT
+  AGENT -.->|"updates"| MEM_F
+  CW -.->|"events"| DASH
 
-  <!-- Score + Triage vertical -->
-  <rect class="box" x="175" y="100" width="130" height="28"/>
-  <text class="ts" x="240" y="114">Score (deterministic)</text>
-  <line class="e" x1="240" y1="78" x2="240" y2="100"/>
-
-  <rect class="box" x="175" y="148" width="130" height="28"/>
-  <text class="ts" x="240" y="162">Triage (haiku LLM)</text>
-  <line class="e" x1="240" y1="128" x2="240" y2="148"/>
-
-  <!-- Triage branches -->
-  <rect class="box" x="165" y="200" width="80" height="24"/>
-  <text class="ts" x="205" y="212">Mark Read</text>
-  <line class="e" x1="215" y1="176" x2="205" y2="200"/>
-  <text class="el" x="195" y="190">IGNORE</text>
-
-  <rect class="box" x="260" y="200" width="95" height="24"/>
-  <text class="ts" x="308" y="212">triage-log</text>
-  <line class="e" x1="260" y1="176" x2="308" y2="200"/>
-  <text class="el" x="290" y="186">NOTE/Q</text>
-
-  <!-- Followup check (right side of daemon) -->
-  <rect class="box" x="380" y="100" width="130" height="28"/>
-  <text class="ts" x="445" y="114">Run check cmds</text>
-  <line class="e" x1="315" y1="60" x2="380" y2="110"/>
-  <text class="el" x="345" y="78">due followups</text>
-
-  <rect class="box" x="530" y="88" width="90" height="22"/>
-  <text class="ts" x="575" y="99">Close (exit 0)</text>
-  <line class="e" x1="510" y1="106" x2="530" y2="99"/>
-
-  <rect class="box" x="530" y="118" width="90" height="22"/>
-  <text class="ts" x="575" y="129">Resched (exit 2)</text>
-  <line class="e" x1="510" y1="120" x2="530" y2="129"/>
-
-  <!-- Spawn? diamond -->
-  <polygon class="box" points="445,195 475,215 445,235 415,215"/>
-  <text class="ts" x="445" y="216">Spawn?</text>
-
-  <line class="e" x1="305" y1="170" x2="415" y2="215"/>
-  <text class="el" x="365" y="186">ACT_NOW</text>
-
-  <line class="e" x1="445" y1="128" x2="445" y2="195"/>
-  <text class="el" x="460" y="165">exit 1</text>
-
-  <!-- Spawn CLI -->
-  <rect class="box" x="380" y="260" width="150" height="34"/>
-  <text class="ts" x="455" y="271">Spawn Claude CLI</text>
-  <text class="ts" x="455" y="285">(single entry point)</text>
-  <line class="e" x1="445" y1="235" x2="455" y2="260"/>
-
-  <!-- Parse response -->
-  <rect class="box" x="380" y="316" width="150" height="26"/>
-  <text class="ts" x="455" y="329">Parse response</text>
-  <line class="e" x1="455" y1="294" x2="455" y2="316"/>
-
-  <!-- Advance cursors -->
-  <rect class="box" x="380" y="362" width="150" height="26"/>
-  <text class="ts" x="455" y="375">Advance cursors → idle</text>
-  <line class="e" x1="455" y1="342" x2="455" y2="362"/>
-
-  <!-- Register followup + timer loop -->
-  <rect class="box" x="175" y="316" width="130" height="24"/>
-  <text class="ts" x="240" y="328">Register followup</text>
-  <line class="e" x1="380" y1="335" x2="305" y2="328"/>
-  <text class="el" x="342" y="325">FOLLOWUP</text>
-
-  <rect class="box" x="175" y="362" width="130" height="24"/>
-  <text class="ts" x="240" y="374">Followup Timer</text>
-  <line class="e" x1="240" y1="340" x2="240" y2="362"/>
-
-  <!-- Timer → checkWork loop-back (clean left-side curve) -->
-  <path class="e" d="M 175,374 C 155,374 155,60 165,58"/>
-  <text class="el" x="158" y="220">due</text>
-
-  <!-- Audit arrows (all go left to audit store, no crossing) -->
-  <line class="em" x1="240" y1="176" x2="100" y2="365"/>
-  <line class="em" x1="445" y1="128" x2="100" y2="370"/>
-  <line class="em" x1="455" y1="342" x2="105" y2="375"/>
-  <text class="el" x="105" y="290">log all</text>
-
-  <!-- Events → Dashboard -->
-  <line class="em" x1="150" y1="110" x2="120" y2="110"/>
-  <text class="el" x="135" y="103">SSE</text>
-
-  <!-- ════ COL 3: Context Bundle + Agent ════ -->
-  <rect class="grp" x="700" y="10" width="480" height="290" stroke="var(--green)"/>
-  <text class="tt" x="712" y="28" fill="var(--green)">Context Bundle ×N (per agent)</text>
-
-  <!-- Bundle files — 2 columns -->
-  <rect class="box" x="720" y="44" width="130" height="24"/><text class="ts" x="785" y="56">IDENTITY.md</text>
-  <rect class="box" x="720" y="76" width="130" height="24"/><text class="ts" x="785" y="88">SOUL.md</text>
-  <rect class="box" x="720" y="108" width="130" height="24"/><text class="ts" x="785" y="120">Skills/*.md</text>
-  <rect class="box" x="720" y="140" width="130" height="24"/><text class="ts" x="785" y="152">PRIORITIES.md</text>
-  <rect class="box" x="720" y="172" width="130" height="24"/><text class="ts" x="785" y="184">ROUTINE.md</text>
-
-  <rect class="box" x="880" y="44" width="280" height="32"/>
-  <text class="ts" x="1020" y="54">MEMORY.md</text>
-  <text class="ts" x="1020" y="68" fill="var(--muted)">(agent-managed)</text>
-
-  <rect class="box" x="880" y="86" width="280" height="32"/>
-  <text class="ts" x="1020" y="96">triage-log/</text>
-  <text class="ts" x="1020" y="110" fill="var(--muted)">(daemon-written, last N days)</text>
-
-  <!-- triage-log write: daemon → bundle -->
-  <path class="e" d="M 355,216 L 670,102 L 880,102"/>
-  <text class="el" x="670" y="92">append</text>
-
-  <!-- Agent Process ×N -->
-  <rect class="sk" x="768" y="358" width="190" height="38"/>
-  <rect class="sk" x="764" y="354" width="190" height="38"/>
-  <rect class="box" x="760" y="350" width="190" height="38"/>
-  <text class="ts" x="855" y="363">Agent Process ×N</text>
-  <text class="ts" x="855" y="377">(stateless Claude CLI)</text>
-
-  <!-- Daemon → bundle (assemble) -->
-  <path class="e" d="M 530,275 L 700,160"/>
-  <text class="el" x="625" y="210">assemble prompt</text>
-
-  <!-- Bundle → Agent (system prompt feeds down) -->
-  <line class="e" x1="855" y1="300" x2="855" y2="350"/>
-  <text class="el" x="890" y="328">system prompt</text>
-
-  <!-- Agent → Daemon (stdout returns) -->
-  <path class="e" d="M 760,370 L 680,370 L 680,285 L 530,285"/>
-  <text class="el" x="700" y="360">stdout JSON</text>
-
-  <!-- Agent → MEMORY.md (updates own memory) -->
-  <path class="em" d="M 1020,350 L 1020,76"/>
-  <text class="el" x="1040" y="215">updates</text>
-
-  <!-- Agent → Chat DB (side effect, runs along bottom) -->
-  <path class="em" d="M 760,388 L 65,388 L 65,193"/>
-  <text class="el" x="400" y="400">hive chat send (side effect)</text>
-</svg>
+  style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
+  style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
+</div>
 
 <h3>Module Map</h3>
 <div class="cols">
