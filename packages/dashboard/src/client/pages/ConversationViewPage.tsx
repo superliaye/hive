@@ -41,18 +41,20 @@ export function ConversationViewPage() {
     ? formatConversationName(conversation.name, agentMap, conversation.members, conversation.displayName)
     : conversationId;
 
-  // For breadcrumb: show conversation partner name (not focal agent) for DMs
-  const breadcrumbLabel = useMemo(() => {
-    if (!conversation || !hasFocalAgent || conversation.type !== 'dm') return conversationDisplayName;
-    // Find the other party in this DM
+  // For DMs with a focal agent, resolve the conversation partner (the OTHER party).
+  // Used in both breadcrumb and h2 title so the user sees who the conversation is WITH (#60).
+  const partnerLabel = useMemo(() => {
+    if (!conversation || !hasFocalAgent || conversation.type !== 'dm') return null;
     const otherAlias = conversation.members.find(m => m !== agentAlias && m !== 'super-user');
     if (otherAlias) {
       const other = agentMap.get(otherAlias);
-      if (other) return `@${other.name}`;
-      return `@${otherAlias}`;
+      if (other) return { name: other.name, emoji: other.emoji };
+      return { name: otherAlias, emoji: undefined };
     }
-    return conversationDisplayName;
-  }, [conversation, hasFocalAgent, agentAlias, agentMap, conversationDisplayName]);
+    return null;
+  }, [conversation, hasFocalAgent, agentAlias, agentMap]);
+
+  const breadcrumbLabel = partnerLabel ? `@${partnerLabel.name}` : conversationDisplayName;
 
   // Loading state — wait for agents and conversation metadata to resolve
   if (!agents || conversationLoading) {
@@ -119,15 +121,28 @@ export function ConversationViewPage() {
             &larr;
           </Link>
           <div className="flex items-center gap-2.5 min-w-0">
-            {hasFocalAgent && focalAgent && (
+            {partnerLabel ? (
+              /* DM with focal agent: show partner emoji + partner name (#60) */
               <>
-                <span className="text-lg shrink-0">{focalAgent.emoji ?? '\u25B9'}</span>
-                <StatusDot status={focalAgent.status} />
+                <span className="text-lg shrink-0">{partnerLabel.emoji ?? '\u25B9'}</span>
+                <h2 className="text-lg font-medium text-slate-200 truncate">
+                  {partnerLabel.name}
+                </h2>
+              </>
+            ) : (
+              /* Group chat or no focal agent: show focal agent dot + full display name */
+              <>
+                {hasFocalAgent && focalAgent && (
+                  <>
+                    <span className="text-lg shrink-0">{focalAgent.emoji ?? '\u25B9'}</span>
+                    <StatusDot status={focalAgent.status} />
+                  </>
+                )}
+                <h2 className="text-lg font-medium text-slate-200 truncate">
+                  {conversationDisplayName}
+                </h2>
               </>
             )}
-            <h2 className="text-lg font-medium text-slate-200 truncate">
-              {conversationDisplayName}
-            </h2>
           </div>
           {/* Member badges */}
           <div className="hidden md:flex items-center gap-1 ml-auto shrink-0">
