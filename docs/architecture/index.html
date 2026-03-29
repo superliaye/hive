@@ -140,51 +140,45 @@
 
 <div class="mermaid-wide mermaid">
 graph TB
-  U["Super-User"] -->|"message"| DASH["Dashboard<br/>(React + SSE)"]
-  DASH -->|"SSE events"| U
-  DASH -->|"POST /api/chat"| CHAT[(Chat DB)]
+  U["Super-User"] -->|"message"| DASH["Dashboard (React + SSE)"]
+  DASH -->|"POST"| CHAT[(Chat DB)]
+  CHAT -->|"signal / tick"| CW
 
   subgraph daemon ["Daemon (central orchestrator)"]
     direction TB
-    CW["checkWork() ×N<br/>(1 lane per agent, FIFO)"]
+    CW["checkWork() ×N · 1 lane per agent"]
     CW --> SCORE["Score (deterministic)"]
+    CW -->|"due followups"| FCHECK{"Check cmds"}
     SCORE --> TRIAGE["Triage (haiku LLM)"]
-    TRIAGE -->|"IGNORE"| MARK["Mark Read"]
-    TRIAGE -->|"NOTE / QUEUE"| TLOG_W["Write triage-log"]
-    TRIAGE -->|"ACT_NOW"| SPAWN["Spawn Claude CLI<br/>(single entry point)"]
-
-    CW -->|"due followups"| FCHECK{"Run check cmds"}
-    FCHECK -->|"exit 0"| FCLOSE["Close followup"]
-    FCHECK -->|"exit 2"| FRESCHED["Reschedule"]
+    TRIAGE -->|"NOTE/QUEUE"| TLOG_W["Write triage-log"]
+    TRIAGE -->|"ACT_NOW"| SPAWN
     FCHECK -->|"exit 1"| SPAWN
-
-    SPAWN --> PARSE["Parse response"]
-    PARSE -->|"FOLLOWUP tags"| REG["Register followup"]
-
-    REG --> FTIMER["Followup Timer"]
+    FCHECK -->|"exit 0"| FCLOSE["Close"]
+    FCHECK -->|"exit 2"| FRESCHED["Resched"]
+    SPAWN["Spawn Claude CLI"] --> PARSE["Parse response"]
+    PARSE -->|"FOLLOWUP"| FTIMER["Followup Timer"]
     FTIMER -->|"due"| CW
-
-    CW -->|"end"| CURSORS["Mark read → idle"]
+    TRIAGE -->|"IGNORE"| MARKREAD["Mark read → idle"]
+    TLOG_W --> MARKREAD
+    PARSE --> MARKREAD
   end
 
   subgraph bundle ["Context Bundle ×N (per agent)"]
-    BFILES["IDENTITY · SOUL · PRIORITIES · ROUTINE<br/>Skills/*.md · MEMORY.md · triage-log/"]
+    BFILES["IDENTITY · SOUL · PRIORITIES · ROUTINE · Skills · MEMORY.md · triage-log/"]
   end
 
-  AGENT["Agent Process ×N<br/>(stateless Claude CLI)"]
-
-  CHAT -->|"signal / tick"| CW
-  TLOG_W -->|"append"| bundle
-  TRIAGE -->|"log"| AUDIT[("Audit Store")]
-  FCHECK -->|"log"| AUDIT
-  PARSE -->|"ACTION tag"| AUDIT
+  AGENT["Agent Process ×N (stateless Claude CLI)"]
+  AUDIT[("Audit Store")]
 
   bundle -->|"assemble prompt"| SPAWN
   SPAWN -->|"spawnClaude()"| AGENT
-  AGENT -->|"stdout JSON"| PARSE
+  AGENT -->|"stdout"| PARSE
   AGENT -.->|"hive chat send"| CHAT
   AGENT -.->|"modifies files"| bundle
-  CW -.->|"events"| DASH
+  TLOG_W -->|"append"| bundle
+  PARSE -.->|"log"| AUDIT
+  TRIAGE -.->|"log"| AUDIT
+  FCHECK -.->|"log"| AUDIT
 
   style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
   style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
