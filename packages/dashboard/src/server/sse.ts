@@ -105,12 +105,15 @@ export class SSEManager {
 
     this.onAgentState = (state) => {
       if (this.clients.length === 0) return;
+      // Read full state from store to get lastInvocation (not included in event)
+      const fullState = this.ctx.state.get(state.agentId);
       this.broadcast('agent-state', {
         agentId: state.agentId,
         status: state.status,
         currentTask: state.currentTask,
         pid: state.pid,
         lastHeartbeat: state.lastHeartbeat,
+        lastInvocation: fullState?.lastInvocation?.toISOString(),
       });
     };
 
@@ -144,6 +147,7 @@ export class SSEManager {
         status: state.status,
         currentTask: state.currentTask,
         lastHeartbeat: state.lastHeartbeat?.toISOString(),
+        lastInvocation: state.lastInvocation?.toISOString(),
       });
       this.lastStates.set(state.agentId, state);
     }
@@ -162,6 +166,7 @@ export class SSEManager {
           status: state.status,
           currentTask: state.currentTask,
           lastHeartbeat: state.lastHeartbeat?.toISOString(),
+          lastInvocation: state.lastInvocation?.toISOString(),
         });
         this.lastStates.set(state.agentId, state);
       }
