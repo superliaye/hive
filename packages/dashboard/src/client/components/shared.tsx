@@ -64,6 +64,41 @@ export function timeAgo(dateStr: string | undefined): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/** Parse a UTC timestamp that may lack Z suffix, for comparison/sorting. */
+export function parseUtcTimestamp(dateStr: string): number {
+  let normalized = dateStr;
+  if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}/.test(normalized) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
+    normalized = normalized.replace(' ', 'T') + 'Z';
+  }
+  return new Date(normalized).getTime();
+}
+
+/** Resolve a sender alias (e.g. "hiro", "super-user") to a display name using the agent map. */
+export function senderName(alias: string, agentMap: Map<string, Agent>): string {
+  if (alias === 'super-user') return 'You';
+  const agent = agentMap.get(alias);
+  return agent?.name ?? alias;
+}
+
+/** Strip markdown syntax for a plain-text preview */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s+/g, '')           // headings
+    .replace(/\*\*(.+?)\*\*/g, '$1')     // bold
+    .replace(/\*(.+?)\*/g, '$1')         // italic
+    .replace(/__(.+?)__/g, '$1')         // bold alt
+    .replace(/_(.+?)_/g, '$1')           // italic alt
+    .replace(/~~(.+?)~~/g, '$1')         // strikethrough
+    .replace(/`(.+?)`/g, '$1')           // inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
+    .replace(/^[-*+]\s+/gm, '')          // unordered list markers
+    .replace(/^\d+\.\s+/gm, '')          // ordered list markers
+    .replace(/^>\s+/gm, '')              // blockquotes
+    .replace(/\n{2,}/g, ' ')             // collapse multiple newlines
+    .replace(/\n/g, ' ')                 // single newlines to space
+    .trim();
+}
+
 /** Convert a conversation name to a human-readable display name using the agent map.
  *  Handles both old format "dm:alias" and new format "dm:0:1".
  *  When displayName is provided (from server), uses it directly.
@@ -102,11 +137,4 @@ export function formatConversationName(conversationName: string, agentMap?: Map<
     return rest;
   }
   return `# ${conversationName}`;
-}
-
-/** Resolve a sender alias (e.g. "hiro", "super-user") to a display name using the agent map. */
-export function senderName(alias: string, agentMap: Map<string, Agent>): string {
-  if (alias === 'super-user') return 'You';
-  const agent = agentMap.get(alias);
-  return agent?.name ?? alias;
 }

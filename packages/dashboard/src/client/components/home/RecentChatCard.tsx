@@ -1,28 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { useSSEEvent } from '../../hooks/useSSE';
-import { DashboardCard, timeAgo, senderName } from '../shared';
+import { DashboardCard, timeAgo, senderName, stripMarkdown } from '../shared';
 import { useAgentMap } from '../../hooks/useAgentMap';
 import type { MessagesResponse, OrgMeta } from '../../types';
-
-/** Strip markdown syntax for a plain-text preview */
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/#{1,6}\s+/g, '')           // headings
-    .replace(/\*\*(.+?)\*\*/g, '$1')     // bold
-    .replace(/\*(.+?)\*/g, '$1')         // italic
-    .replace(/__(.+?)__/g, '$1')         // bold alt
-    .replace(/_(.+?)_/g, '$1')           // italic alt
-    .replace(/~~(.+?)~~/g, '$1')         // strikethrough
-    .replace(/`(.+?)`/g, '$1')           // inline code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links
-    .replace(/^[-*+]\s+/gm, '')          // unordered list markers
-    .replace(/^\d+\.\s+/gm, '')          // ordered list markers
-    .replace(/^>\s+/gm, '')              // blockquotes
-    .replace(/\n{2,}/g, ' ')             // collapse multiple newlines
-    .replace(/\n/g, ' ')                 // single newlines to space
-    .trim();
-}
 
 export function RecentChatCard() {
   const agentMap = useAgentMap();
