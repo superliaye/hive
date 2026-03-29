@@ -140,58 +140,44 @@
 
 <div class="mermaid-wide mermaid">
 graph TB
-  U["Super-User"] -->|"message"| DASH["Dashboard (React + SSE)"]
-  DASH -->|"POST"| CHAT[(Chat DB)]
-  CHAT -->|"signal / tick"| CW
+  U["Super-User"] -->|"message"| DASH["Dashboard Interface<br/>(React + SSE)"]
+  DASH <-->|"REST + SSE"| HIVE
 
-  subgraph daemon ["Daemon (central orchestrator)"]
-    direction TB
-    EBUS["EventBus"]
-    CW["checkWork() ×N · 1 lane per agent"]
-    CW --> SCORE["Score (deterministic)"]
-    CW -->|"due followups"| FCHECK{"Check cmds"}
-    SCORE --> TRIAGE["Triage (haiku LLM)"]
-    TRIAGE -->|"NOTE/QUEUE"| TLOG_W["Write triage-log"]
-    TRIAGE -->|"ACT_NOW"| SPAWN
-    FCHECK -->|"exit 1"| SPAWN
-    FCHECK -->|"exit 0"| FCLOSE["Close"]
-    FCHECK -->|"exit 2"| FRESCHED["Resched"]
-    SPAWN["Spawn Claude CLI"] --> PARSE["Parse response"]
-    PARSE -->|"FOLLOWUP"| FTIMER["Followup Timer"]
-    FTIMER -->|"due"| CW
-    TRIAGE -->|"IGNORE"| MARKREAD["Mark read → idle"]
-    TLOG_W --> MARKREAD
-    PARSE --> MARKREAD
-    CW -.-> EBUS
-  end
+  HIVE["Hive Service<br/>(Express + Daemon)"] <-->|"read/write"| CHAT[(Chat DB)]
+  HIVE -->|"spawnClaude()"| AGENT
+  AGENT -->|"stdout JSON"| HIVE
+  HIVE -->|"write triage"| B_TLOG
+  HIVE -->|"write events"| B_EVENTS
+  HIVE -.->|"log"| AUDIT[("Audit Store")]
 
-  subgraph bundle ["Context Bundle ×N"]
+  subgraph bundle ["Context Bundle ×N (per agent)"]
     direction LR
-    B_ID["IDENTITY.md"]
-    B_SOUL["SOUL.md"]
-    B_PRIO["PRIORITIES.md"]
-    B_ROUTINE["ROUTINE.md"]
-    B_SKILLS["Skills/*.md"]
-    B_MEM["MEMORY.md"]
-    B_TLOG["triage-log/"]
+    subgraph files [" "]
+      B_ID["IDENTITY.md"]
+      B_SOUL["SOUL.md"]
+      B_PRIO["PRIORITIES.md"]
+      B_ROUTINE["ROUTINE.md"]
+      B_SKILLS["Skills/*.md"]
+    end
+    subgraph agentdata [" "]
+      B_MEM["MEMORY.md +<br/>memory.sqlite"]
+    end
+    subgraph daemondata [" "]
+      B_TLOG[("triage-log.db")]
+      B_EVENTS[("agent.db<br/>Event DB 🔜")]
+    end
   end
 
-  AGENT["Agent Process ×N (stateless Claude CLI)"]
-  AUDIT[("Audit Store")]
+  AGENT["Agent Process ×N<br/>(stateless Claude CLI)"]
 
-  EBUS -->|"SSE"| DASH
-  bundle -->|"assemble prompt"| SPAWN
-  SPAWN -->|"spawnClaude()"| AGENT
-  AGENT -->|"stdout"| PARSE
-  AGENT -.->|"hive chat send"| CHAT
-  AGENT -.->|"modifies files"| bundle
-  TLOG_W -->|"append"| B_TLOG
-  PARSE -.->|"log"| AUDIT
-  TRIAGE -.->|"log"| AUDIT
-  FCHECK -.->|"log"| AUDIT
+  bundle -->|"assemble<br/>system prompt"| HIVE
+  AGENT -->|"hive chat send"| CHAT
+  AGENT -->|"modifies"| bundle
 
-  style daemon fill:transparent,stroke:#58a6ff,stroke-width:2px
   style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
+  style files fill:transparent,stroke:transparent
+  style agentdata fill:transparent,stroke:transparent
+  style daemondata fill:transparent,stroke:transparent
 </div>
 
 <h3>Module Map</h3>
