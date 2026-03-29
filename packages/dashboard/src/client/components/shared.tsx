@@ -37,11 +37,19 @@ export function StatusDot({ status }: { status: string }) {
   return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />;
 }
 
+/**
+ * Convert a UTC timestamp string to a human-readable relative time.
+ * Handles multiple formats from our backends:
+ *  - SQLite CURRENT_TIMESTAMP: "YYYY-MM-DD HH:MM:SS" (no T, no Z)
+ *  - SQLite strftime:          "YYYY-MM-DDTHH:MM:SS.fff" (T but no Z)
+ *  - Full ISO 8601:            "YYYY-MM-DDTHH:MM:SS.fffZ"
+ * All timestamps without a timezone indicator are treated as UTC (per CLAUDE.md convention).
+ */
 export function timeAgo(dateStr: string | undefined): string {
   if (!dateStr) return 'never';
-  // Handle SQLite datetime format "YYYY-MM-DD HH:MM:SS" (no T, no Z — treat as UTC)
   let normalized = dateStr;
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(normalized)) {
+  // If no timezone indicator (Z or +/-offset), treat as UTC by appending Z
+  if (/^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}/.test(normalized) && !/[Zz]|[+-]\d{2}:?\d{2}$/.test(normalized)) {
     normalized = normalized.replace(' ', 'T') + 'Z';
   }
   const ts = new Date(normalized).getTime();
@@ -94,4 +102,11 @@ export function formatConversationName(conversationName: string, agentMap?: Map<
     return rest;
   }
   return `# ${conversationName}`;
+}
+
+/** Resolve a sender alias (e.g. "hiro", "super-user") to a display name using the agent map. */
+export function senderName(alias: string, agentMap: Map<string, Agent>): string {
+  if (alias === 'super-user') return 'You';
+  const agent = agentMap.get(alias);
+  return agent?.name ?? alias;
 }
