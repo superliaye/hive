@@ -146,6 +146,7 @@ graph TB
 
   subgraph daemon ["Daemon (central orchestrator)"]
     direction TB
+    EBUS["EventBus"]
     CW["checkWork() ×N · 1 lane per agent"]
     CW --> SCORE["Score (deterministic)"]
     CW -->|"due followups"| FCHECK{"Check cmds"}
@@ -161,21 +162,30 @@ graph TB
     TRIAGE -->|"IGNORE"| MARKREAD["Mark read → idle"]
     TLOG_W --> MARKREAD
     PARSE --> MARKREAD
+    CW -.-> EBUS
   end
 
-  subgraph bundle ["Context Bundle ×N (per agent)"]
-    BFILES["IDENTITY · SOUL · PRIORITIES · ROUTINE · Skills · MEMORY.md · triage-log/"]
+  subgraph bundle ["Context Bundle ×N"]
+    direction LR
+    B_ID["IDENTITY.md"]
+    B_SOUL["SOUL.md"]
+    B_PRIO["PRIORITIES.md"]
+    B_ROUTINE["ROUTINE.md"]
+    B_SKILLS["Skills/*.md"]
+    B_MEM["MEMORY.md"]
+    B_TLOG["triage-log/"]
   end
 
   AGENT["Agent Process ×N (stateless Claude CLI)"]
   AUDIT[("Audit Store")]
 
+  EBUS -->|"SSE"| DASH
   bundle -->|"assemble prompt"| SPAWN
   SPAWN -->|"spawnClaude()"| AGENT
   AGENT -->|"stdout"| PARSE
   AGENT -.->|"hive chat send"| CHAT
   AGENT -.->|"modifies files"| bundle
-  TLOG_W -->|"append"| bundle
+  TLOG_W -->|"append"| B_TLOG
   PARSE -.->|"log"| AUDIT
   TRIAGE -.->|"log"| AUDIT
   FCHECK -.->|"log"| AUDIT
