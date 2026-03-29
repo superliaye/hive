@@ -268,12 +268,12 @@ graph TB
 
     subgraph memory ["Agent Memory"]
       B_MEMMD["MEMORY.md<br/>(agent-curated notes)"]
-      B_MEMDIR["memory/<br/>(activity logs, daemon-written)"]
       B_MEMDB[("memory.sqlite<br/>FTS5 + vec0 semantic search")]
     end
 
     subgraph daemondata ["Daemon-Managed Data"]
       B_TLOG[("triage-log.db<br/>all triage classifications")]
+      B_MEMDIR["memory/<br/>(activity logs)"]
       B_EVENTS[("events.db 🔜<br/>ORG_CHANGE, SCHEDULED,<br/>WEBHOOK, SYSTEM")]
     end
   end
