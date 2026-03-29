@@ -310,6 +310,65 @@ graph LR
 </ul>
 <p><strong>Prompt assembly order:</strong> IDENTITY → SOUL → BUREAU → Protocols → Skills → PRIORITIES → ROUTINE → MEMORY → Triage Log → Events → ACTION instructions</p>
 
+<h3>Agent Process Deep Dive</h3>
+<div class="mermaid-wide mermaid">
+graph TB
+  HIVE["Hive Service"] -->|"spawnClaude()"| AGENT_CORE
+
+  subgraph agent ["Agent Process ×N (stateless, isolated)"]
+    direction TB
+
+    subgraph llm ["LLM Core"]
+      AGENT_CORE["Claude CLI<br/>(model per agent config)"]
+      SYSPROMPT["System Prompt<br/>(assembled from Context Bundle)"]
+      WORKINPUT["Work Input<br/>(ACT_NOW messages + followup context)"]
+      SYSPROMPT --> AGENT_CORE
+      WORKINPUT --> AGENT_CORE
+    end
+
+    subgraph tools ["Available CLI Tools"]
+      T_CHAT["hive chat<br/>send · inbox · ack · search · group"]
+      T_MEM["hive memory<br/>search · index · status"]
+      T_GIT["git · gh<br/>commit · PR · issues · branch"]
+      T_PW["playwright<br/>browser automation"]
+      T_FS["file system<br/>read · write · edit"]
+    end
+
+    subgraph response ["Response (stdout JSON)"]
+      R_ACTION["ACTION: tag<br/>(required — what was done)"]
+      R_FOLLOWUP["FOLLOWUP: tag<br/>(optional — commitments to track)"]
+      R_TEXT["Response text<br/>(posted to conversations)"]
+    end
+
+    AGENT_CORE --> response
+  end
+
+  T_CHAT -->|"send / search"| CHAT[(Chat DB)]
+  T_MEM -->|"semantic search"| MEMDB[("memory.sqlite")]
+  T_GIT -->|"push / PR"| GH["GitHub"]
+  T_FS -->|"read / write"| BUNDLE["Context Bundle"]
+  BUNDLE -->|"assembled into"| SYSPROMPT
+
+  response -->|"stdout JSON"| HIVE
+  HIVE -->|"parse"| R_ACTION
+  HIVE -->|"parse"| R_FOLLOWUP
+
+  style agent fill:transparent,stroke:#bc8cff,stroke-width:2px
+  style llm fill:transparent,stroke:transparent
+  style tools fill:transparent,stroke:transparent
+  style response fill:transparent,stroke:transparent
+</div>
+
+<p><strong>Lifecycle:</strong></p>
+<ul>
+  <li><strong>Stateless</strong> — each invocation is a fresh Claude CLI process. No memory of previous runs except what's in the Context Bundle.</li>
+  <li><strong>System prompt</strong> assembled by Hive Service from Context Bundle files (IDENTITY → SOUL → BUREAU → Protocols → Skills → PRIORITIES → ROUTINE → MEMORY → Triage Log → Events).</li>
+  <li><strong>Work input</strong> contains ACT_NOW messages and/or followup context (check results, attempt count, final flag).</li>
+  <li><strong>Tools</strong> are standard CLIs available during execution. The agent can send messages, search memory, commit code, browse the web, and modify its own Context Bundle files.</li>
+  <li><strong>Response</strong> must include an <code>ACTION:</code> tag (audit trail). May include <code>FOLLOWUP:</code> tags for automatic tracking. Response text may be posted to conversations.</li>
+  <li><strong>Isolated</strong> — <code>HIVE_DAEMON_SPAWN=1</code> blocks cursor manipulation. Agent cannot interfere with other agents' state.</li>
+</ul>
+
 <h3>Module Map</h3>
 <div class="cols">
 <pre>src/
