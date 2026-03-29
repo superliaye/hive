@@ -39,7 +39,7 @@ CREATE VIRTUAL TABLE chunks_vec USING vec0(embedding float[384]);
 Per agent, these files are indexed:
 
 1. **MEMORY.md** — Curated long-term notes (agent-editable, persists across sessions)
-2. **memory/*.md** — Daily logs (last 3 days, auto-appended by daemon)
+2. **memory/*.md** — Agent-written daily notes (if any)
 
 ## Indexing
 
@@ -61,14 +61,9 @@ Hybrid approach combining text and semantic similarity:
 
 Used during checkWork to enrich agent context with relevant memories before spawning.
 
-## Daily Logs
+## Triage Log (separate from memory)
 
-Auto-appended by the daemon during checkWork when messages are classified as NOTE or QUEUE:
-
-```markdown
-<!-- memory/2026-03-28.md -->
-- [2026-03-28T19:30:00Z] @alice in dm:0:2: PRIORITY — Dashboard bug from the board...
-- [2026-03-28T19:45:00Z] @bob in dm:2:5: PR OPEN: https://github.com/...
-```
-
-Written to memory **before** marking messages as read (crash safety).
+Triage results (NOTE/QUEUE/IGNORE/ACT_NOW classifications) are stored in a separate
+per-agent `triage-log.db` SQLite database — NOT in the memory system. The daemon writes
+all triage decisions there, and the last N entries are fed to the agent's system prompt
+at spawn time. See [daemon.md](daemon.md) for details.

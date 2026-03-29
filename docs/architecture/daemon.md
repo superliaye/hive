@@ -70,7 +70,7 @@ The sole entry point for agent invocations. Handles both inbox triage and follow
 6. Log triage audit row (message count, classification breakdown, tokens)
 7. Override: super-user messages → always ACT_NOW
 8. Process NOTE/QUEUE:
-   - Append to memory file (memory/YYYY-MM-DD.md)
+   - Log to triage-log.db (per-agent SQLite)
    - Mark read
 9. Process IGNORE:
    - Mark read

@@ -175,7 +175,6 @@ graph TB
   AGENT_CORE -->|"modifies"| bundle
   TOOL_CHAT -->|"send / search"| CHAT
   TOOL_MEM -->|"semantic search"| B_MEMDB
-  HIVE -->|"index"| B_MEMDB
 
   style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
   style agent fill:transparent,stroke:#bc8cff,stroke-width:2px
@@ -674,7 +673,7 @@ graph LR
 <h3>Source Files Indexed</h3>
 <ol>
   <li><strong>MEMORY.md</strong> &mdash; Curated long-term notes (agent-editable)</li>
-  <li><strong>memory/*.md</strong> &mdash; Last 3 days of daily logs (auto-appended)</li>
+  <li><strong>memory/*.md</strong> &mdash; Agent-written daily notes (if any)</li>
 </ol>
 
 <h3>Indexing</h3>
