@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { timeAgo } from '../shared';
 import type { Invocation } from '../../types';
 
@@ -119,9 +119,8 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
         </thead>
         <tbody>
           {actionable.map((inv) => (
-            <>
+            <Fragment key={inv.id}>
               <tr
-                key={inv.id}
                 onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
                 className="border-b border-slate-800/50 text-slate-400 hover:bg-slate-800/30 cursor-pointer transition-colors"
               >
@@ -153,7 +152,7 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
                 <td className="px-4 py-2 text-xs text-slate-500">{timeAgo(inv.timestamp)}</td>
               </tr>
               {expandedId === inv.id && (
-                <tr key={`${inv.id}-detail`} className="border-b border-slate-800/50">
+                <tr className="border-b border-slate-800/50">
                   <td colSpan={6} className="px-4 py-3 bg-slate-800/20">
                     <div className="space-y-2 text-xs">
                       {inv.inputSummary && (
@@ -187,7 +186,7 @@ export function AuditTable({ invocations }: { invocations: Invocation[] }) {
                   </td>
                 </tr>
               )}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>

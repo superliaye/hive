@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useApi } from '../../hooks/useApi';
 import { StatusDot, timeAgo, EmptyState } from '../shared';
 import { AgentMdViewer } from './AgentMdViewer';
@@ -230,11 +230,6 @@ function AuditDetailInline({ invocationId }: { invocationId: string }) {
 function AuditTab({ agent }: { agent: AgentDetail }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Filter to checkWork/followup invocations that may have full detail
-  const spawnInvocations = agent.recentInvocations.filter(
-    inv => inv.invocationType === 'checkWork' || inv.invocationType === 'followup'
-  );
-
   return (
     <div>
       {agent.recentInvocations.length > 0 ? (
@@ -252,9 +247,8 @@ function AuditTab({ agent }: { agent: AgentDetail }) {
               const isSpawn = inv.invocationType === 'checkWork' || inv.invocationType === 'followup';
               const isExpanded = expandedId === inv.id;
               return (
-                <>
+                <Fragment key={inv.id}>
                   <tr
-                    key={inv.id}
                     onClick={() => isSpawn && setExpandedId(isExpanded ? null : inv.id)}
                     className={`border-b border-slate-800/50 text-slate-400 ${isSpawn ? 'cursor-pointer hover:bg-slate-800/30' : ''} transition-colors`}
                   >
@@ -264,7 +258,7 @@ function AuditTab({ agent }: { agent: AgentDetail }) {
                     <td className="py-1">{inv.durationMs ? `${(inv.durationMs / 1000).toFixed(1)}s` : '-'}</td>
                   </tr>
                   {isExpanded && (
-                    <tr key={`${inv.id}-detail`}>
+                    <tr>
                       <td colSpan={4} className="py-1 px-1 bg-slate-800/20">
                         {inv.actionSummary && (
                           <p className="text-[10px] text-slate-300 mb-1">{inv.actionSummary}</p>
@@ -273,7 +267,7 @@ function AuditTab({ agent }: { agent: AgentDetail }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
