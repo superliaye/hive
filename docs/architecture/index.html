@@ -160,10 +160,11 @@ graph TB
 
     SPAWN --> PARSE["Parse response"]
     PARSE -->|"FOLLOWUP tags"| REG["Register followup"]
-    PARSE --> ADV["Advance cursors → idle"]
 
     REG --> FTIMER["Followup Timer"]
     FTIMER -->|"due"| CW
+
+    TRIAGE --> CURSORS["Advance cursors → idle"]
   end
 
   subgraph bundle ["Context Bundle ×N (per agent)"]
