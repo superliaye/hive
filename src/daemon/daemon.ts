@@ -8,6 +8,7 @@ import { parseOrgFlat } from '../org/parser.js';
 import { detectNewAgents } from './hot-reload.js';
 import { FollowUpStore } from './followup-store.js';
 import { FollowUpScheduler } from './followup-scheduler.js';
+import { TriageLogStore } from './triage-log-store.js';
 
 const CRASH_MAX_COUNT = 3;
 const CRASH_WINDOW_MS = 10 * 60 * 1000;
@@ -24,6 +25,7 @@ export class Daemon {
   private decayIndex = new Map<string, number>();
   private followUpStore: FollowUpStore | undefined;
   private followUpScheduler: FollowUpScheduler | undefined;
+  private triageLogStores = new Map<string, TriageLogStore>();
 
   constructor(config: DaemonConfig) {
     this.config = config;
@@ -57,8 +59,13 @@ export class Daemon {
       }
     }
 
-    // Initialize follow-up tracker
+    // Initialize per-agent triage log stores
     const pathMod = await import('path');
+    for (const [id, agent] of this.config.orgChart.agents) {
+      this.triageLogStores.set(id, new TriageLogStore(pathMod.join(agent.dir, 'triage-log.db')));
+    }
+
+    // Initialize follow-up tracker
     this.followUpStore = new FollowUpStore(pathMod.join(this.config.dataDir, 'orchestrator.db'));
     this.followUpScheduler = new FollowUpScheduler({
       store: this.followUpStore,
@@ -97,6 +104,12 @@ export class Daemon {
     // Stop follow-up scheduler
     this.followUpScheduler?.stop();
     this.followUpStore?.dispose();
+
+    // Close triage log stores
+    for (const store of this.triageLogStores.values()) {
+      store.close();
+    }
+    this.triageLogStores.clear();
 
     // Clear all timers
     for (const timer of this.tickTimers.values()) {
@@ -175,6 +188,10 @@ export class Daemon {
       this.config.orgChart.agents.set(id, agent);
       this.config.state.register(id);
 
+      // Create triage log store for new agent
+      const pathMod = await import('path');
+      this.triageLogStores.set(id, new TriageLogStore(pathMod.join(agent.dir, 'triage-log.db')));
+
       const tickMs = this.config.tickIntervalMs ?? 600_000;
       const timer = setInterval(() => {
         if (!this.running) return;
@@ -192,6 +209,11 @@ export class Daemon {
       if (timer) {
         clearInterval(timer);
         this.tickTimers.delete(id);
+      }
+      const triageStore = this.triageLogStores.get(id);
+      if (triageStore) {
+        triageStore.close();
+        this.triageLogStores.delete(id);
       }
       console.log(`[daemon] hot-reload: deregistered agent ${id}`);
     }
@@ -270,6 +292,7 @@ export class Daemon {
       },
       followUpStore: this.followUpStore,
       followUpScheduler: this.followUpScheduler,
+      triageLogStore: this.triageLogStores.get(agent.person.alias),
     };
 
     const result = await checkWork(ctx);

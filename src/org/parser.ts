@@ -3,10 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import type { AgentConfig, AgentIdentity, OrgChart, Person } from '../types.js';
 
-const SKIP_DIRS = ['.claude', '.workspace', '.archive', '.proposals', 'memory', 'triage-log', 'node_modules', '.git'];
-
-/** Number of recent triage-log daily files to include in agent context. */
-const TRIAGE_LOG_DAYS = 3;
+const SKIP_DIRS = ['.claude', '.workspace', '.archive', '.proposals', 'memory', 'node_modules', '.git'];
 
 // Pattern: {id}-{alias} folder name
 const FOLDER_PATTERN = /^(\d+)-(.+)$/;
@@ -54,30 +51,6 @@ async function loadMemory(dir: string): Promise<string> {
   return parts.join('\n\n');
 }
 
-/**
- * Load recent triage log entries — triage results written by the daemon.
- * Separate from agent-managed memory. Last N days, most recent first.
- */
-async function loadTriageLog(dir: string): Promise<string> {
-  const logDir = path.join(dir, 'triage-log');
-  try {
-    const files = await fs.readdir(logDir);
-    const dated = files
-      .filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
-      .sort()
-      .reverse()
-      .slice(0, TRIAGE_LOG_DAYS);
-
-    const parts: string[] = [];
-    for (const file of dated) {
-      const content = await fs.readFile(path.join(logDir, file), 'utf-8');
-      if (content.trim()) {
-        parts.push(`## ${file.replace('.md', '')}\n${content.trim()}`);
-      }
-    }
-    return parts.length > 0 ? `# Triage Log (last ${TRIAGE_LOG_DAYS} days)\n\n${parts.join('\n\n')}` : '';
-  } catch { return ''; }
-}
 
 /**
  * Load all SKILL.md files from the agent's .claude/skills/ directory.
@@ -115,7 +88,7 @@ export async function readAgentFiles(dir: string, sharedProtocols?: string): Pro
     priorities: await read('PRIORITIES.md'),
     routine: await read('ROUTINE.md'),
     memory: await loadMemory(dir),
-    triageLog: await loadTriageLog(dir),
+    triageLog: '',  // Populated at spawn time from SQLite triage-log store
     protocols: sharedProtocols ?? '',
     skills: await loadSkills(dir),
   };

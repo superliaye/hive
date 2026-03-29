@@ -12,8 +12,8 @@ import { parseFollowUps } from './followup-parser.js';
 import { validateFollowUp } from './followup-validator.js';
 import type { FollowUpStore, FollowUp } from './followup-store.js';
 import type { FollowUpScheduler } from './followup-scheduler.js';
+import type { TriageLogStore } from './triage-log-store.js';
 import { execFile } from 'node:child_process';
-import fs from 'fs';
 import path from 'path';
 
 export interface CheckWorkContext {
@@ -37,6 +37,9 @@ export interface CheckWorkContext {
 
   /** Optional: execute a shell check command for followup verification. */
   execCheckCommand?: (command: string, timeoutMs?: number) => Promise<{ exitCode: number; output: string }>;
+
+  /** Optional: SQLite-backed triage log store for recording triage decisions. */
+  triageLogStore?: TriageLogStore;
 }
 
 export async function runFollowUpCheckCommand(
@@ -119,20 +122,6 @@ function buildWorkInput(messages: ScoredMessage[], triageResults: TriageResult[]
   ].join('\n');
 }
 
-/**
- * Append a triage result to the agent's triage log (triage-log/YYYY-MM-DD.md).
- * Separate from the agent's memory system which the agent manages itself.
- */
-function appendToTriageLog(agentDir: string, entry: string): void {
-  const logDir = path.join(agentDir, 'triage-log');
-  if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const logFile = path.join(logDir, `${today}.md`);
-  const existing = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf-8') : '';
-  fs.writeFileSync(logFile, existing + entry + '\n');
-}
 
 /**
  * Fire-and-forget haiku call to summarize what the agent did.
@@ -292,13 +281,19 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       }
     }
 
-    // Process NOTE + QUEUE — append to inbox log (separate from agent memory)
+    // Log all triage decisions to SQLite store (not just NOTE/QUEUE)
     const noteAndQueue = [...notes, ...queue];
-    for (const result of noteAndQueue) {
-      const msg = ranked.find(m => m.messageId === result.messageId);
-      if (msg) {
-        const entry = `- [${msg.timestamp.toISOString()}] @${msg.sender} in #${msg.conversation}: ${msg.content.slice(0, 200)}`;
-        appendToTriageLog(agent.dir, entry);
+    if (ctx.triageLogStore) {
+      for (const result of triageResults) {
+        const msg = ranked.find(m => m.messageId === result.messageId);
+        if (msg) {
+          ctx.triageLogStore.append({
+            classification: result.classification,
+            sender: msg.sender,
+            conversation: msg.conversation,
+            contentSnippet: msg.content.slice(0, 200),
+          });
+        }
       }
     }
 
@@ -372,6 +367,17 @@ export async function checkWork(ctx: CheckWorkContext): Promise<CheckWorkResult>
       });
 
       try {
+        // Inject recent triage log entries into agent prompt context
+        if (ctx.triageLogStore) {
+          const recent = ctx.triageLogStore.getRecent(20);
+          if (recent.length > 0) {
+            const logText = recent.map(e =>
+              `- [${e.created_at}] ${e.classification}: @${e.sender} in #${e.conversation}: ${e.content_snippet}`
+            ).reverse().join('\n');
+            agent.files.triageLog = `# Triage Log (recent)\n\n${logText}`;
+          }
+        }
+
         const systemPrompt = assemblePrompt(agent);
         let workInput = actNow.length > 0 ? buildWorkInput(ranked, triageResults) : '';
 
