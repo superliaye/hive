@@ -19,6 +19,7 @@ export function createConversationRoutes(ctx: HiveContext): Router {
         return {
           id: conversationId,
           name: conversationId,
+          type: ch?.type ?? (conversationId.startsWith('dm:') ? 'dm' : 'group'),
           displayName: ctx.conversations.formatForDisplay(conversationId, 0),
           members: memberAliases,
           createdAt: ch?.createdAt ?? new Date().toISOString(),

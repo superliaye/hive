@@ -74,6 +74,7 @@ export interface Invocation {
 export interface Conversation {
   id: string;
   name: string;
+  type: 'dm' | 'group';
   displayName?: string;
   members: string[];
   createdAt: string;
