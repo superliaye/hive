@@ -21,7 +21,10 @@ export function ConversationViewPage() {
   const hasFocalAgent = agentAlias !== '_';
 
   const { data: agents } = useApi<Agent[]>('/api/agents');
-  const { data: conversations } = useApi<Conversation[]>('/api/conversations');
+  // Fetch single conversation metadata directly — no super-user scope restriction (#59)
+  const { data: conversation, loading: conversationLoading } = useApi<Conversation>(
+    conversationId ? `/api/conversations/${encodeURIComponent(conversationId)}` : null
+  );
 
   const agentMap = useMemo(
     () => new Map(agents?.map(a => [a.id, a]) ?? []),
@@ -29,7 +32,6 @@ export function ConversationViewPage() {
   );
 
   const focalAgent = hasFocalAgent ? agentMap.get(agentAlias!) : undefined;
-  const conversation = conversations?.find(c => c.name === conversationId);
 
   // Determine the focused sender alias for right-aligning their messages
   const focusedSender = hasFocalAgent ? agentAlias : undefined;
@@ -52,8 +54,8 @@ export function ConversationViewPage() {
     return conversationDisplayName;
   }, [conversation, hasFocalAgent, agentAlias, agentMap, conversationDisplayName]);
 
-  // Loading state — wait for agents and conversations to resolve
-  if (!agents || !conversations) {
+  // Loading state — wait for agents and conversation metadata to resolve
+  if (!agents || conversationLoading) {
     return <EmptyState message="Loading..." />;
   }
 

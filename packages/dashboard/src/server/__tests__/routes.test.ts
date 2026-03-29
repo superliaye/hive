@@ -142,6 +142,33 @@ describe('Dashboard API routes', () => {
     expect(dmConv.type).toBe('dm');
   });
 
+  it('GET /api/conversations/:id returns single conversation metadata without scope restriction (#59)', async () => {
+    // Create a DM between two non-super-user agents (ceo↔ar)
+    const ceoId = ctx.chatAdapter.resolveAlias('ceo');
+    const arId = ctx.chatAdapter.resolveAlias('ar');
+    ctx.conversations.ensureDm(ceoId, arId);
+    const convId = `dm:${Math.min(ceoId, arId)}:${Math.max(ceoId, arId)}`;
+
+    // This conversation is NOT accessible to super-user (personId=0)
+    const superUserConvs = ctx.access.getAccessibleConversations(0);
+    expect(superUserConvs).not.toContain(convId);
+
+    // But the single-conversation endpoint should still return it
+    const { status, body } = await request(`/api/conversations/${convId}`);
+    expect(status).toBe(200);
+    expect(body.name).toBe(convId);
+    expect(body.type).toBe('dm');
+    expect(body).toHaveProperty('members');
+    expect(body).toHaveProperty('messageCount');
+    expect(body).toHaveProperty('lastMessage');
+  });
+
+  it('GET /api/conversations/:id returns 404 for nonexistent conversation', async () => {
+    const { status, body } = await request('/api/conversations/dm:999:998');
+    expect(status).toBe(404);
+    expect(body.error).toBe('Conversation not found');
+  });
+
   it('GET /api/conversations/:id/messages returns messages object with total', async () => {
     const conversationIds = ctx.access.getAccessibleConversations(0);
     const conversationId = conversationIds[0] ?? 'dm:0:1';
