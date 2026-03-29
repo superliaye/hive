@@ -250,51 +250,51 @@ graph TB
 
 <h3>Context Bundle Deep Dive</h3>
 <div class="mermaid-wide mermaid">
-graph TB
+graph LR
+  HIVE["Hive Service"]
+
   subgraph bundle ["Context Bundle ×N (per agent, on disk)"]
     direction TB
 
-    subgraph identity ["Agent Identity"]
-      B_ID["IDENTITY.md<br/>(name, role, model, skills)"]
-      B_SOUL["SOUL.md<br/>(personality, authority, values)"]
-      B_BUREAU["BUREAU.md<br/>(org position, collaborators)"]
+    subgraph daemondata ["Daemon-Managed"]
+      B_TLOG[("triage-log.db")]
+      B_MEMDIR["memory/<br/>(activity logs)"]
+      B_EVENTS[("events.db 🔜")]
     end
 
-    subgraph config ["Agent Config"]
-      B_PRIO["PRIORITIES.md<br/>(ACTIVE / READY / BLOCKED / DONE)"]
-      B_ROUTINE["ROUTINE.md<br/>(scheduled behaviors)"]
-      B_SKILLS["Skills/*.md<br/>(loaded by Claude CLI)"]
+    subgraph config ["Config Files"]
+      B_ID["IDENTITY.md"]
+      B_SOUL["SOUL.md"]
+      B_PRIO["PRIORITIES.md"]
+      B_ROUTINE["ROUTINE.md"]
+      B_SKILLS["Skills/*.md"]
+      B_BUREAU["BUREAU.md"]
     end
 
     subgraph memory ["Agent Memory"]
-      B_MEMMD["MEMORY.md<br/>(agent-curated notes)"]
-      B_MEMDB[("memory.sqlite<br/>FTS5 + vec0 semantic search")]
-    end
-
-    subgraph daemondata ["Daemon-Managed Data"]
-      B_TLOG[("triage-log.db<br/>all triage classifications")]
-      B_MEMDIR["memory/<br/>(activity logs)"]
-      B_EVENTS[("events.db 🔜<br/>ORG_CHANGE, SCHEDULED,<br/>WEBHOOK, SYSTEM")]
+      B_MEMMD["MEMORY.md<br/>(agent-curated)"]
+      B_MEMDB[("memory.sqlite<br/>(FTS5 + vec0)")]
     end
   end
 
-  HIVE["Hive Service"] -->|"reads all files →<br/>assembles system prompt"| bundle
+  AGENT["Agent Process"]
+
+  HIVE -->|"reads all →<br/>assembles prompt"| bundle
   HIVE -->|"writes triage"| B_TLOG
+  HIVE -->|"writes activity"| B_MEMDIR
   HIVE -->|"writes events"| B_EVENTS
-  HIVE -->|"writes activity logs"| B_MEMDIR
 
-  AGENT["Agent Process"] -->|"modifies any file"| bundle
-  AGENT -->|"hive memory search"| B_MEMDB
-  AGENT -->|"writes notes"| B_MEMMD
+  bundle -->|"modifies any file"| AGENT
+  B_MEMDB -->|"hive memory search"| AGENT
+  B_MEMMD -->|"writes notes"| AGENT
 
-  PROV["hive agent create<br/>(provisioning)"] -->|"creates bundle<br/>from role template"| bundle
+  PROV["hive agent create"] -->|"creates from template"| bundle
   PROV -->|"ROLE_CREATED"| B_EVENTS
 
   style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
-  style identity fill:transparent,stroke:transparent
+  style daemondata fill:transparent,stroke:transparent
   style config fill:transparent,stroke:transparent
   style memory fill:transparent,stroke:transparent
-  style daemondata fill:transparent,stroke:transparent
 </div>
 
 <p><strong>Who reads what:</strong></p>
