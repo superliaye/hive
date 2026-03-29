@@ -151,16 +151,8 @@ graph TB
   HIVE -.->|"log"| AUDIT[("Audit Store")]
 
   subgraph bundle ["Context Bundle ×N (per agent)"]
-    B_ID["IDENTITY.md"]
-    B_SOUL["SOUL.md"]
-    B_PRIO["PRIORITIES.md"]
-    B_ROUTINE["ROUTINE.md"]
-    B_SKILLS["Skills/*.md"]
-    B_MEMMD["MEMORY.md<br/>(agent-managed)"]
-    B_MEMDIR["memory/<br/>(daily logs)"]
-    B_MEMDB[("memory.sqlite<br/>(FTS5 + vec0)")]
-    B_TLOG[("triage-log.db")]
-    B_EVENTS[("events.db 🔜")]
+    B_ID["IDENTITY.md"] ~~~ B_SOUL["SOUL.md"] ~~~ B_PRIO["PRIORITIES.md"] ~~~ B_ROUTINE["ROUTINE.md"] ~~~ B_SKILLS["Skills/*.md"]
+    B_MEMMD["MEMORY.md<br/>(agent-managed)"] ~~~ B_MEMDIR["memory/<br/>(daily logs)"] ~~~ B_MEMDB[("memory.sqlite<br/>(FTS5 + vec0)")] ~~~ B_TLOG[("triage-log.db")] ~~~ B_EVENTS[("events.db 🔜")]
   end
 
   subgraph agent ["Agent Process ×N (stateless Claude CLI)"]
