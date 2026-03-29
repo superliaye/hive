@@ -88,6 +88,96 @@ export function createAgentRoutes(ctx: HiveContext): Router {
     res.json(agents);
   });
 
+  // GET /api/agents/:alias/conversations — all conversations for a specific agent
+  router.get('/:alias/conversations', (req, res) => {
+    try {
+      const alias = req.params.alias;
+      const agent = ctx.orgChart.agents.get(alias);
+      if (!agent) {
+        res.status(404).json({ error: 'Agent not found' });
+        return;
+      }
+
+      const state = ctx.state.get(alias);
+      const personId = ctx.chatAdapter.resolveAlias(alias);
+
+      // Get all conversations this agent is a member of
+      const conversationIds = ctx.access.getAccessibleConversations(personId);
+
+      const dms: any[] = [];
+      const groups: any[] = [];
+
+      for (const convId of conversationIds) {
+        const ch = ctx.conversations.getConversation(convId);
+        const members = ctx.conversations.getMembers(convId);
+        const memberAliases = members.map(m => {
+          try { return ctx.chatAdapter.resolveId(m.personId); } catch { return `person:${m.personId}`; }
+        });
+        const history = ctx.messages.history(convId, { limit: 1 });
+        const lastMsg = history.messages[0] ?? null;
+
+        const type = ch?.type ?? (convId.startsWith('dm:') ? 'dm' : 'group');
+
+        if (type === 'dm') {
+          const otherAlias = memberAliases.find(a => a !== alias) ?? memberAliases[0];
+          const otherAgent = ctx.orgChart.agents.get(otherAlias ?? '');
+          const isSuper = otherAlias === 'super-user';
+
+          dms.push({
+            id: convId,
+            otherParty: {
+              alias: otherAlias,
+              name: isSuper ? 'Super User' : (otherAgent?.identity.name ?? otherAlias),
+              emoji: isSuper ? null : (otherAgent?.identity.emoji ?? null),
+            },
+            messageCount: history.total,
+            lastMessage: lastMsg ? {
+              sender: lastMsg.senderAlias,
+              content: lastMsg.content.length > 120 ? lastMsg.content.slice(0, 120) + '…' : lastMsg.content,
+              timestamp: lastMsg.timestamp,
+            } : null,
+          });
+        } else {
+          groups.push({
+            id: convId,
+            name: `#${convId}`,
+            memberCount: members.length,
+            messageCount: history.total,
+            lastMessage: lastMsg ? {
+              sender: lastMsg.senderAlias,
+              content: lastMsg.content.length > 120 ? lastMsg.content.slice(0, 120) + '…' : lastMsg.content,
+              timestamp: lastMsg.timestamp,
+            } : null,
+          });
+        }
+      }
+
+      // Sort by most recent activity
+      const sortByLastMessage = (a: any, b: any) => {
+        const tsA = a.lastMessage?.timestamp ?? '';
+        const tsB = b.lastMessage?.timestamp ?? '';
+        return tsB.localeCompare(tsA);
+      };
+      dms.sort(sortByLastMessage);
+      groups.sort(sortByLastMessage);
+
+      res.json({
+        agent: {
+          alias: agent.person.alias,
+          name: agent.identity.name,
+          emoji: agent.identity.emoji ?? null,
+          role: agent.identity.role,
+          status: state?.status ?? 'idle',
+        },
+        dms,
+        groups,
+      });
+    } catch (err: any) {
+      console.error('[agents/:alias/conversations] Error:', err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /api/agents/:alias — single agent detail with live files
   router.get('/:alias', async (req, res) => {
     const agent = ctx.orgChart.agents.get(req.params.alias);

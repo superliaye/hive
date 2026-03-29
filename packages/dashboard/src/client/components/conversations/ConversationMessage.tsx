@@ -1,25 +1,31 @@
 import Markdown from 'react-markdown';
 import { timeAgo } from '../shared';
-import type { Message } from '../../types';
+import type { Agent, Message } from '../../types';
 
 interface ConversationMessageProps {
   message: Message;
   isFocused: boolean;
+  /** Optional agent data for emoji/name display */
+  agent?: Agent;
 }
 
-export function ConversationMessage({ message, isFocused }: ConversationMessageProps) {
+export function ConversationMessage({ message, isFocused, agent }: ConversationMessageProps) {
+  const displayName = agent?.name ?? message.sender;
+  const emoji = agent?.emoji;
+
   return (
     <div className={`flex ${isFocused ? 'justify-end' : 'justify-start'} px-4 py-1.5`}>
       <div className={`max-w-[75%] ${isFocused ? 'items-end' : 'items-start'} flex flex-col`}>
         <div className={`flex items-center gap-2 mb-0.5 ${isFocused ? 'flex-row-reverse' : ''}`}>
           <span className={`text-xs font-medium ${isFocused ? 'text-amber-400/80' : 'text-slate-400'}`}>
-            {message.sender}
+            {emoji && <span className="mr-1">{emoji}</span>}
+            {displayName}
           </span>
           <span className="text-xs text-slate-600">{timeAgo(message.timestamp)}</span>
         </div>
         <div className={`rounded-2xl px-4 py-2.5 ${
           isFocused
-            ? 'bg-amber-500/10 border border-amber-500/20 rounded-tr-sm'
+            ? 'bg-amber-900/20 border border-amber-700/40 rounded-tr-sm'
             : 'bg-slate-800 border border-slate-700/50 rounded-tl-sm'
         }`}>
           <div className={`prose prose-invert prose-sm max-w-none
