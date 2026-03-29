@@ -268,7 +268,7 @@ graph TB
 
     subgraph memory ["Agent Memory (agent-managed)"]
       B_MEMMD["MEMORY.md<br/>(curated long-term notes)"]
-      B_MEMDIR["memory/<br/>(daily notes)"]
+      B_MEMDIR["memory/<br/>(agent daily notes)"]
       B_MEMDB[("memory.sqlite<br/>FTS5 + vec0 semantic search")]
     end
 
@@ -282,11 +282,12 @@ graph TB
   HIVE -->|"writes triage<br/>classifications"| B_TLOG
   HIVE -->|"writes system<br/>events"| B_EVENTS
 
-  AGENT["Agent Process"] -->|"modifies any file"| identity
+  AGENT["Agent Process"] -->|"modifies any file"| bundle
   AGENT -->|"hive memory search"| B_MEMDB
-  AGENT -->|"writes curated notes"| B_MEMMD
+  AGENT -->|"writes notes"| B_MEMMD
 
-  PROV["hive agent create<br/>(provisioning)"] -->|"ROLE_CREATED"| B_EVENTS
+  PROV["hive agent create<br/>(provisioning)"] -->|"creates bundle<br/>from role template"| bundle
+  PROV -->|"ROLE_CREATED"| B_EVENTS
 
   style bundle fill:transparent,stroke:#3fb950,stroke-width:2px
   style identity fill:transparent,stroke:transparent
