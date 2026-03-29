@@ -284,9 +284,9 @@ graph LR
   HIVE -->|"writes activity"| B_MEMDIR
   HIVE -->|"writes events"| B_EVENTS
 
-  bundle -->|"modifies any file"| AGENT
-  B_MEMDB -->|"hive memory search"| AGENT
-  B_MEMMD -->|"writes notes"| AGENT
+  AGENT -->|"modifies any file"| bundle
+  AGENT -->|"hive memory search"| B_MEMDB
+  AGENT -->|"writes notes"| B_MEMMD
 
   PROV["hive agent create"] -->|"creates from template"| bundle
   PROV -->|"ROLE_CREATED"| B_EVENTS
